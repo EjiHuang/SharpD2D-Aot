@@ -16,6 +16,7 @@ namespace SharpD2D.Windows
         public const uint WM_IME_KEYUP = 0x0291;
         public const uint WM_DPICHANGED = 0x02E0;
         public const uint WM_DWMCOMPOSITIONCHANGED = 0x031E;
+        public const uint WM_QUIT = 0x0012;
         public const uint WM_SIZE = 0x0005;
         public const uint WM_MOVE = 0x0003;
     }

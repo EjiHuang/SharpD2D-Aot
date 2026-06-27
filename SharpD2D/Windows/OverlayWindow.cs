@@ -140,17 +140,23 @@ namespace SharpD2D.Windows
             WindowMessageReceived?.Invoke(msg, (nint)wParam.Value, lParam.Value);
             switch (msg)
             {
-                case 0x0014: // WM_ERASEBKGND
-                    Functions.SendMessageW(hWnd, 0x000F, 0, 0); // WM_PAINT
+                case WindowMessage.WM_ERASEBKGND:
+                    Functions.SendMessageW(hWnd, WindowMessage.WM_PAINT, 0, 0);
                     break;
-                case 0x0290: case 0x0291: case 0x0112: // WM_IME_KEYUP/DOWN, WM_SYSCOMMAND
-                case 0x0104: case 0x0105: case 0x02E0: // WM_SYSKEYDOWN/UP, WM_DPICHANGED
-                case 0x0085: case 0x000F: // WM_NCPAINT, WM_PAINT
+                case WindowMessage.WM_IME_KEYDOWN:
+                case WindowMessage.WM_IME_KEYUP:
+                case WindowMessage.WM_SYSCOMMAND:
+                case WindowMessage.WM_SYSKEYDOWN:
+                case WindowMessage.WM_SYSKEYUP:
+                case WindowMessage.WM_DPICHANGED:
+                case WindowMessage.WM_NCPAINT:
+                case WindowMessage.WM_PAINT:
                     return 0;
-                case 0x031E: // WM_DWMCOMPOSITIONCHANGED
+                case WindowMessage.WM_DWMCOMPOSITIONCHANGED:
                     WindowHelper.ExtendFrameIntoClientArea(hWnd);
                     return 0;
-                case 0x0002: case 0x0082: // WM_DESTROY, WM_NCDESTROY
+                case WindowMessage.WM_DESTROY:
+                case WindowMessage.WM_NCDESTROY:
                     Functions.PostQuitMessage(0);
                     break;
             }
@@ -175,7 +181,7 @@ namespace SharpD2D.Windows
                 var hasMsg = Functions.PeekMessageW(out var message, default, 0, 0, PEEK_MESSAGE_REMOVE_TYPE.PM_REMOVE);
                 if (hasMsg)
                 {
-                    if (message.message == 0x0012) break;
+                    if (message.message == WindowMessage.WM_QUIT) break;
                     Functions.TranslateMessage(message);
                     Functions.DispatchMessageW(message);
                 }
@@ -183,7 +189,8 @@ namespace SharpD2D.Windows
                 if (Handle == default) break;
 
                 var nowTicks = watch.ElapsedTicks;
-                if (nowTicks - lastFrameTicks >= targetTicks)
+                var elapsed = nowTicks - lastFrameTicks;
+                if (elapsed >= targetTicks)
                 {
                     var prevTicks = lastFrameTicks;
                     lastFrameTicks = nowTicks;
@@ -192,7 +199,12 @@ namespace SharpD2D.Windows
                 }
                 else
                 {
-                    Thread.Sleep(1);
+                    var remainingTicks = targetTicks - elapsed;
+                    var remainingMs = (int)(remainingTicks * 1000 / Stopwatch.Frequency);
+                    if (remainingMs > 1)
+                        Thread.Sleep(remainingMs - 1);
+                    else
+                        Thread.Sleep(0);
                 }
             }
         }
@@ -254,13 +266,7 @@ namespace SharpD2D.Windows
                 if (Handle != default) DestroyWindow();
                 disposedValue = true;
             }
-        }
-
-        public new void Dispose()
-        {
-            base.Dispose(true);
-            Dispose(true);
-            GC.SuppressFinalize(this);
+            base.Dispose(disposing);
         }
     }
 }

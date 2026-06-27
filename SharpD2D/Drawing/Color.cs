@@ -136,7 +136,7 @@ namespace SharpD2D.Drawing
             G = color.G;
             B = color.B;
 
-            A = alpha;
+            A = alpha / 255.0f;
         }
 
         /// <summary>

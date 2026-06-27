@@ -64,7 +64,7 @@ namespace SharpD2D.Drawing
         /// <summary>
         ///     Enables or disables word wrapping for this Font.
         /// </summary>
-        public bool WordWeapping
+        public bool WordWrapping
         {
             get => TextFormat.Object.GetWordWrapping() == DWRITE_WORD_WRAPPING.DWRITE_WORD_WRAPPING_WRAP;
             set => TextFormat.Object.SetWordWrapping(value ? DWRITE_WORD_WRAPPING.DWRITE_WORD_WRAPPING_WRAP : DWRITE_WORD_WRAPPING.DWRITE_WORD_WRAPPING_NO_WRAP);

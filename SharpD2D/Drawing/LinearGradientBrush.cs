@@ -84,12 +84,15 @@ namespace SharpD2D.Drawing
             Dispose(false);
         }
 
+        private bool _disposed;
+
         /// <summary>
         ///     Releases all resources used by this LinearGradientBrush.
         /// </summary>
         /// <param name="disposing">A Boolean value indicating whether this is called from the destructor.</param>
         protected virtual void Dispose(bool disposing)
         {
+            if (_disposed) return;
             if (disposing)
             {
                 _brush?.Dispose();
@@ -97,6 +100,7 @@ namespace SharpD2D.Drawing
                 _stopCollection?.Dispose();
                 _stopCollection = null;
             }
+            _disposed = true;
         }
 
         /// <summary>

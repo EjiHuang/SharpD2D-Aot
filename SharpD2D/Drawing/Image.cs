@@ -46,10 +46,24 @@ namespace SharpD2D.Drawing
         }
 
         ~Image() => Dispose(false);
+
+        private bool _disposed;
+
         protected virtual void Dispose(bool disposing)
         {
-            if (disposing) { Bitmap?.Dispose(); Bitmap = null; }
+            if (_disposed) return;
+            if (disposing)
+            {
+                Bitmap?.Dispose();
+                Bitmap = null;
+            }
+            _disposed = true;
         }
-        public void Dispose() { Dispose(true); GC.SuppressFinalize(this); }
+
+        public void Dispose()
+        {
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
     }
 }
