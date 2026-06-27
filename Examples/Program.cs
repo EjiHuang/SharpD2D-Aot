@@ -1,4 +1,6 @@
-﻿using System.Drawing;
+﻿using System.Diagnostics;
+using System.Drawing;
+using System.Threading;
 using SharpD2D;
 using SharpD2D.Windows;
 using Color = SharpD2D.Drawing.Color;
@@ -89,6 +91,10 @@ internal class D2DControl : Control
 {
     private Canvas _canvas;
     private Example _example;
+    private Stopwatch _watch = new();
+    private int _frameCount;
+    private long _lastTicks;
+    private System.Windows.Forms.Timer _timer;
 
     protected override void OnHandleCreated(EventArgs e)
     {
@@ -96,5 +102,28 @@ internal class D2DControl : Control
         _example = new Example(_canvas);
         _canvas.FPS = 60;
         _canvas.Initialize();
+        _watch.Start();
+        _lastTicks = _watch.ElapsedTicks;
+
+        _timer = new System.Windows.Forms.Timer { Interval = 16 };
+        _timer.Tick += (_, _) =>
+        {
+            var now = _watch.ElapsedTicks;
+            var delta = (now - _lastTicks) * 1000 / Stopwatch.Frequency;
+            _lastTicks = now;
+            _canvas.RenderFrame(_frameCount++, _watch.ElapsedMilliseconds, delta);
+        };
+        _timer.Start();
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            _timer?.Stop();
+            _timer?.Dispose();
+            _canvas?.Dispose();
+        }
+        base.Dispose(disposing);
     }
 }

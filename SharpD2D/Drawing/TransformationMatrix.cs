@@ -1,8 +1,7 @@
 ﻿using System;
 using System.Globalization;
 using System.Runtime.CompilerServices;
-using SharpDX;
-using SharpDX.Mathematics.Interop;
+using DirectN;
 
 /*
  * Original source and license: https://github.com/sharpdx/SharpDX/blob/master/Source/SharpDX.Mathematics/Matrix3x2.cs
@@ -30,15 +29,15 @@ namespace SharpD2D.Drawing
         public static readonly TransformationMatrix Identity =
             new TransformationMatrix(1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f);
 
-        private RawMatrix3x2 _matrix;
+        private D2D_MATRIX_3X2_F _matrix;
 
         /// <summary>
         ///     Element (1,1)
         /// </summary>
         public float M11
         {
-            get => _matrix.M11;
-            set => _matrix.M11 = value;
+            get => _matrix._11;
+            set => _matrix._11 = value;
         }
 
         /// <summary>
@@ -46,8 +45,8 @@ namespace SharpD2D.Drawing
         /// </summary>
         public float M12
         {
-            get => _matrix.M12;
-            set => _matrix.M12 = value;
+            get => _matrix._12;
+            set => _matrix._12 = value;
         }
 
         /// <summary>
@@ -55,8 +54,8 @@ namespace SharpD2D.Drawing
         /// </summary>
         public float M21
         {
-            get => _matrix.M21;
-            set => _matrix.M21 = value;
+            get => _matrix._21;
+            set => _matrix._21 = value;
         }
 
         /// <summary>
@@ -64,8 +63,8 @@ namespace SharpD2D.Drawing
         /// </summary>
         public float M22
         {
-            get => _matrix.M22;
-            set => _matrix.M22 = value;
+            get => _matrix._22;
+            set => _matrix._22 = value;
         }
 
         /// <summary>
@@ -73,8 +72,8 @@ namespace SharpD2D.Drawing
         /// </summary>
         public float M31
         {
-            get => _matrix.M31;
-            set => _matrix.M31 = value;
+            get => _matrix._31;
+            set => _matrix._31 = value;
         }
 
         /// <summary>
@@ -82,8 +81,8 @@ namespace SharpD2D.Drawing
         /// </summary>
         public float M32
         {
-            get => _matrix.M32;
-            set => _matrix.M32 = value;
+            get => _matrix._32;
+            set => _matrix._32 = value;
         }
 
         /// <summary>
@@ -103,17 +102,17 @@ namespace SharpD2D.Drawing
                 switch (index)
                 {
                     case 0:
-                        return _matrix.M11;
+                        return _matrix._11;
                     case 1:
-                        return _matrix.M12;
+                        return _matrix._12;
                     case 2:
-                        return _matrix.M21;
+                        return _matrix._21;
                     case 3:
-                        return _matrix.M22;
+                        return _matrix._22;
                     case 4:
-                        return _matrix.M31;
+                        return _matrix._31;
                     case 5:
-                        return _matrix.M32;
+                        return _matrix._32;
                     default:
                         throw new ArgumentOutOfRangeException(nameof(index));
                 }
@@ -123,22 +122,22 @@ namespace SharpD2D.Drawing
                 switch (index)
                 {
                     case 0:
-                        _matrix.M11 = value;
+                        _matrix._11 = value;
                         break;
                     case 1:
-                        _matrix.M12 = value;
+                        _matrix._12 = value;
                         break;
                     case 2:
-                        _matrix.M21 = value;
+                        _matrix._21 = value;
                         break;
                     case 3:
-                        _matrix.M22 = value;
+                        _matrix._22 = value;
                         break;
                     case 4:
-                        _matrix.M31 = value;
+                        _matrix._31 = value;
                         break;
                     case 5:
-                        _matrix.M32 = value;
+                        _matrix._32 = value;
                         break;
                     default:
                         throw new ArgumentOutOfRangeException(nameof(index));
@@ -215,14 +214,14 @@ namespace SharpD2D.Drawing
         /// <param name="value">The value that will be assigned to all components.</param>
         public TransformationMatrix(float value)
         {
-            _matrix = new RawMatrix3x2(value, value, value, value, value, value);
+            _matrix = new D2D_MATRIX_3X2_F(value, value, value, value, value, value);
         }
 
         /// <summary>
-        ///     Initializes a new TransformationMatrix using the given RawMatrix3x2.
+        ///     Initializes a new TransformationMatrix using the given D2D_MATRIX_3X2_F.
         /// </summary>
         /// <param name="matrix"></param>
-        public TransformationMatrix(RawMatrix3x2 matrix)
+        public TransformationMatrix(D2D_MATRIX_3X2_F matrix)
         {
             _matrix = matrix;
         }
@@ -238,7 +237,7 @@ namespace SharpD2D.Drawing
         /// <param name="m32">The value to assign at row 3 column 2 of the matrix.</param>
         public TransformationMatrix(float m11, float m12, float m21, float m22, float m31, float m32)
         {
-            _matrix = new RawMatrix3x2(m11, m12, m21, m22, m31, m32);
+            _matrix = new D2D_MATRIX_3X2_F(m11, m12, m21, m22, m31, m32);
         }
 
         /// <summary>
@@ -255,7 +254,7 @@ namespace SharpD2D.Drawing
             if (values == null) throw new ArgumentNullException(nameof(values));
             if (values.Length != 6) throw new ArgumentOutOfRangeException(nameof(values));
 
-            _matrix = new RawMatrix3x2(values[0], values[1], values[2], values[3], values[4], values[5]);
+            _matrix = new D2D_MATRIX_3X2_F(values[0], values[1], values[2], values[3], values[4], values[5]);
         }
 
         /// <summary>
@@ -913,19 +912,19 @@ namespace SharpD2D.Drawing
         }
 
         /// <summary>
-        ///     Converts the given TransformationMatrix to a RawMatrix3x2.
+        ///     Converts the given TransformationMatrix to a D2D_MATRIX_3X2_F.
         /// </summary>
         /// <param name="value">The TransformationMatrix to convert.</param>
-        public static implicit operator RawMatrix3x2(TransformationMatrix value)
+        public static implicit operator D2D_MATRIX_3X2_F(TransformationMatrix value)
         {
             return value._matrix;
         }
 
         /// <summary>
-        ///     Converts the given RawMatrix3x2 to a TransformationMatrix.
+        ///     Converts the given D2D_MATRIX_3X2_F to a TransformationMatrix.
         /// </summary>
-        /// <param name="value">The RawMatrix3x2 to convert.</param>
-        public static explicit operator TransformationMatrix(RawMatrix3x2 value)
+        /// <param name="value">The D2D_MATRIX_3X2_F to convert.</param>
+        public static explicit operator TransformationMatrix(D2D_MATRIX_3X2_F value)
         {
             return new TransformationMatrix(value);
         }

@@ -1,75 +1,45 @@
-﻿using System;
+using System;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Threading;
-using PInvoke;
+using DirectN;
 using SharpD2D.Drawing;
-using static SharpD2D.PInvoke.User32Ex;
-using static PInvoke.User32;
 
 namespace SharpD2D.Windows
 {
-    /// <summary>
-    ///     Represents a transparent overlay window.
-    /// </summary>
     public class OverlayWindow : Canvas, IDisposable
     {
-        /// <summary>
-        /// </summary>
-        /// <param name="msg"></param>
-        /// <param name="wParam"></param>
-        /// <param name="lParam"></param>
-        public delegate void WmDelegate(WindowMessage msg, IntPtr wParam, IntPtr lParam);
+        public delegate void WmDelegate(uint msg, IntPtr wParam, IntPtr lParam);
 
         private readonly Thread _windowThread;
-        private readonly WndProc _wndProc;
+        private readonly WNDPROC _wndProc;
 
-        /// <summary>
-        ///     Class name of this window
-        /// </summary>
         public readonly string ClassName;
-
-        /// <summary>
-        ///     Gets the windows menu name.
-        /// </summary>
         public readonly string MenuName;
 
-        /// <summary>
-        ///     Initializes a new OverlayWindow.
-        /// </summary>
-        public OverlayWindow(Graphics gfx = null) : this(Rectangle.Create(0, 0, 800, 600), gfx)
-        {
-        }
+        public OverlayWindow(Graphics gfx = null) : this(Rectangle.Create(0, 0, 800, 600), gfx) { }
 
-        /// <summary>
-        ///     Create a new overlay window with given position and size
-        /// </summary>
-        /// <param name="rect"></param>
-        /// <param name="className"></param>
-        /// <param name="title"></param>
-        /// <param name="gfx"></param>
-        /// <exception cref="Exception"></exception>
-        public OverlayWindow(Rectangle rect, Graphics gfx = null, string className = null, string title = null) : base(
-            default, gfx)
+        public OverlayWindow(Rectangle rect, Graphics gfx = null, string className = null, string title = null)
+            : base(default, gfx)
         {
             ClassName = className;
             MenuName = WindowHelper.GenerateRandomTitle();
             if (string.IsNullOrEmpty(ClassName)) ClassName = WindowHelper.GenerateRandomClass();
             unsafe
             {
-                // Need to assign it somewhere to ensure it won't be garbage-collected
                 _wndProc = WindowProcedure;
-
                 fixed (char* lpMenu = MenuName, lpCLass = ClassName)
                 {
-                    var wndClassEx = new WNDCLASSEX
+                    var wc = new WNDCLASSEXW
                     {
-                        cbSize = Marshal.SizeOf(typeof(WNDCLASSEX)),
+                        cbSize = Marshal.SizeOf(typeof(WNDCLASSEXW)),
                         style = 0,
                         lpfnWndProc = _wndProc,
                         lpszMenuName = lpMenu,
                         lpszClassName = lpCLass
                     };
-                    if (RegisterClassEx(ref wndClassEx) == 0) throw new Exception("Failed to register window class");
+                    if (User32Native.RegisterClassExW(ref wc) == 0)
+                        throw new Exception("Failed to register window class");
                 }
             }
 
@@ -79,256 +49,204 @@ namespace SharpD2D.Windows
             _windowThread = Thread.CurrentThread;
         }
 
-        /// <summary>
-        ///     Gets or sets the window style
-        /// </summary>
-        public WindowStyles Style
+        public WINDOW_STYLE Style
         {
-            get => (WindowStyles)GetWindowLong(Handle, WindowLongIndexFlags.GWL_STYLE);
-            set => SetWindowLong(Handle, WindowLongIndexFlags.GWL_STYLE, (SetWindowLongFlags)value);
+            get => (WINDOW_STYLE)Functions.GetWindowLongW(new HWND(Handle), WINDOW_LONG_PTR_INDEX.GWL_STYLE);
+            set => Functions.SetWindowLongW(new HWND(Handle), WINDOW_LONG_PTR_INDEX.GWL_STYLE, (int)value);
         }
 
-        /// <summary>
-        ///     Gets or sets the extended window style
-        /// </summary>
-        public WindowStylesEx StyleEx
+        public WINDOW_EX_STYLE StyleEx
         {
-            get => (WindowStylesEx)GetWindowLong(Handle, WindowLongIndexFlags.GWL_EXSTYLE);
-            set => SetWindowLong(Handle, WindowLongIndexFlags.GWL_EXSTYLE, (SetWindowLongFlags)value);
+            get => (WINDOW_EX_STYLE)Functions.GetWindowLongW(new HWND(Handle), WINDOW_LONG_PTR_INDEX.GWL_EXSTYLE);
+            set => Functions.SetWindowLongW(new HWND(Handle), WINDOW_LONG_PTR_INDEX.GWL_EXSTYLE, (int)value);
         }
 
-        /// <summary>
-        ///     Retrieves the window info
-        /// </summary>
-        public WINDOWINFO Info
+        public bool IsTopmost
+        {
+            get => StyleEx.HasFlag(WINDOW_EX_STYLE.WS_EX_TOPMOST);
+            set
+            {
+                if (value) WindowHelper.MakeTopmost(Handle);
+                else WindowHelper.RemoveTopmost(Handle);
+            }
+        }
+
+        public bool IsVisible
+        {
+            get => Handle != default && Functions.IsWindowVisible(new HWND(Handle));
+            set
+            {
+                if (Handle != default)
+                    Functions.ShowWindow(new HWND(Handle), value ? SHOW_WINDOW_CMD.SW_SHOW : SHOW_WINDOW_CMD.SW_HIDE);
+            }
+        }
+
+        public string Title
         {
             get
             {
-                var info = new WINDOWINFO();
-                if (!GetWindowInfo(Handle, ref info)) throw new Exception("Failed to get window info");
-                return info;
+                var len = User32Native.GetWindowTextLengthW(new HWND(Handle));
+                if (len == 0) return string.Empty;
+                unsafe
+                {
+                    var chars = stackalloc char[len + 1];
+                    User32Native.GetWindowTextW(new HWND(Handle), chars, len + 1);
+                    return new string(chars, 0, len);
+                }
             }
+            set => User32Native.SetWindowTextW(new HWND(Handle), value);
         }
 
-        /// <summary>
-        ///     Gets or sets a Boolean indicating whether this window is topmost.
-        /// </summary>
-        public bool IsTopmost
-        {
-            get => ((SetWindowLongFlags)StyleEx).HasFlag(SetWindowLongFlags.WS_EX_TOPMOST);
-            set
-            {
-                if (value)
-                    WindowHelper.MakeTopmost(Handle);
-                else
-                    WindowHelper.RemoveTopmost(Handle);
-            }
-        }
-
-        /// <summary>
-        ///     Gets or sets a Boolean indicating whether this window is visible.
-        /// </summary>
-        public bool IsVisible
-        {
-            get => IsWindowVisible(Handle);
-            set => ShowWindow(Handle, value ? WindowShowStyle.SW_SHOW : WindowShowStyle.SW_HIDE);
-        }
-
-        /// <summary>
-        ///     Gets or sets the windows title.
-        /// </summary>
-        public string Title
-        {
-            get => GetWindowText(Handle);
-            set => SetWindowText(Handle, value);
-        }
-
-        /// <summary>
-        ///     Invoked when a window message is received, only works if you run <see cref="MessageLoop" />.
-        /// </summary>
         public event WmDelegate WindowMessageReceived;
 
-        /// <summary>
-        ///     Allows an object to try to free resources and perform other cleanup operations before it is reclaimed by garbage
-        ///     collection.
-        /// </summary>
-        ~OverlayWindow()
-        {
-            Dispose(false);
-        }
+        ~OverlayWindow() { Dispose(false); }
 
         private void DestroyWindow()
         {
             lock (this)
             {
-                if (!IsWindow(Handle))
-                    throw new InvalidOperationException("Window not found, probably already destroyed");
-                PostMessage(Handle, WindowMessage.WM_DESTROY, IntPtr.Zero, IntPtr.Zero);
+                if (Handle == default) return;
+                var hWnd = new HWND(Handle);
                 Handle = default;
+                if (Functions.IsWindow(hWnd))
+                    Functions.DestroyWindow(hWnd);
             }
         }
 
         private void InstantiateNewWindow(Rectangle rect, string title)
         {
-            var styleEx = WindowStylesEx.WS_EX_TRANSPARENT | WindowStylesEx.WS_EX_TOPMOST |
-                          WindowStylesEx.WS_EX_LAYERED | WindowStylesEx.WS_EX_NOACTIVATE;
-            var style = WindowStyles.WS_POPUP | WindowStyles.WS_VISIBLE;
-            Handle = CreateWindowEx(
+            var styleEx = WINDOW_EX_STYLE.WS_EX_TRANSPARENT | WINDOW_EX_STYLE.WS_EX_TOPMOST |
+                          WINDOW_EX_STYLE.WS_EX_LAYERED | WINDOW_EX_STYLE.WS_EX_NOACTIVATE;
+            var style = WINDOW_STYLE.WS_POPUP | WINDOW_STYLE.WS_VISIBLE;
+            Handle = Functions.CreateWindowExW(
                 styleEx,
-                ClassName,
-                title,
+                PWSTR.From(ClassName),
+                PWSTR.From(title),
                 style,
-                rect.Left, rect.Top,
-                rect.Width, rect.Height,
-                IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero);
+                rect.Left, rect.Top, rect.Width, rect.Height,
+                default, default, default, 0);
 
-            SetLayeredWindowAttributes(Handle, 0, 255, 0x2); //alpha
-            UpdateWindow(Handle);
+            X = rect.Left;
+            Y = rect.Top;
+            Width = rect.Width;
+            Height = rect.Height;
+
+            User32Native.SetLayeredWindowAttributes(new HWND(Handle), 0, 255, 0x2);
+            Functions.UpdateWindow(new HWND(Handle));
         }
 
-        private unsafe IntPtr WindowProcedure(IntPtr hWnd, WindowMessage msg, void* wParam, void* lParam)
+        private LRESULT WindowProcedure(HWND hWnd, uint msg, WPARAM wParam, LPARAM lParam)
         {
-            WindowMessageReceived?.Invoke(msg, (IntPtr)wParam, (IntPtr)lParam);
+            WindowMessageReceived?.Invoke(msg, (nint)wParam.Value, lParam.Value);
             switch (msg)
             {
-                case WindowMessage.WM_ERASEBKGND:
-                    SendMessage(hWnd, WindowMessage.WM_PAINT, (IntPtr)0, (IntPtr)0);
+                case 0x0014: // WM_ERASEBKGND
+                    Functions.SendMessageW(hWnd, 0x000F, 0, 0); // WM_PAINT
                     break;
-
-                case WindowMessage.WM_IME_KEYUP:
-                case WindowMessage.WM_IME_KEYDOWN:
-                case WindowMessage.WM_SYSCOMMAND:
-                case WindowMessage.WM_SYSKEYDOWN:
-                case WindowMessage.WM_SYSKEYUP:
-                case WindowMessage.WM_DPICHANGED:
-                case WindowMessage.WM_NCPAINT:
-                case WindowMessage.WM_PAINT:
-                    return (IntPtr)0;
-
-                case WindowMessage.WM_DWMCOMPOSITIONCHANGED:
+                case 0x0290: case 0x0291: case 0x0112: // WM_IME_KEYUP/DOWN, WM_SYSCOMMAND
+                case 0x0104: case 0x0105: case 0x02E0: // WM_SYSKEYDOWN/UP, WM_DPICHANGED
+                case 0x0085: case 0x000F: // WM_NCPAINT, WM_PAINT
+                    return 0;
+                case 0x031E: // WM_DWMCOMPOSITIONCHANGED
                     WindowHelper.ExtendFrameIntoClientArea(hWnd);
-                    return (IntPtr)0;
-
-                case WindowMessage.WM_DESTROY:
-                case WindowMessage.WM_NCDESTROY:
-                    PostQuitMessage(0);
+                    return 0;
+                case 0x0002: case 0x0082: // WM_DESTROY, WM_NCDESTROY
+                    Functions.PostQuitMessage(0);
                     break;
             }
 
-            return DefWindowProc(hWnd, msg, (IntPtr)wParam, (IntPtr)lParam);
+            return User32Native.DefWindowProcW(hWnd, msg, wParam, lParam);
         }
 
-        /// <summary>
-        ///     Run the message loop to receive WM messages, must be called from the thread that this window is created
-        /// </summary>
         public unsafe void MessageLoop()
         {
-            if (!IsWindow(Handle))
-                throw new InvalidOperationException(
-                    "Invalid handle, this may indicate this object is already disposed");
-
+            if (!Functions.IsWindow(new HWND(Handle)))
+                throw new InvalidOperationException("Invalid handle");
             if (Thread.CurrentThread != _windowThread)
-                throw new InvalidOperationException(
-                    "The message loop must be run in the same thread this window is created");
+                throw new InvalidOperationException("Must run in same thread");
 
-            MSG message = default;
-            while (GetMessage(&message, Handle, default, default) > 0)
+            var watch = Stopwatch.StartNew();
+            long lastFrameTicks = 0;
+            int frameCount = 0;
+            var targetTicks = Stopwatch.Frequency / 60;
+
+            while (Handle != default)
             {
-                TranslateMessage(ref message);
-                DispatchMessage(ref message);
-                WaitMessage();
-            }
+                var hasMsg = Functions.PeekMessageW(out var message, default, 0, 0, PEEK_MESSAGE_REMOVE_TYPE.PM_REMOVE);
+                if (hasMsg)
+                {
+                    if (message.message == 0x0012) break;
+                    Functions.TranslateMessage(message);
+                    Functions.DispatchMessageW(message);
+                }
 
-            Dispose();
+                if (Handle == default) break;
+
+                var nowTicks = watch.ElapsedTicks;
+                if (nowTicks - lastFrameTicks >= targetTicks)
+                {
+                    var prevTicks = lastFrameTicks;
+                    lastFrameTicks = nowTicks;
+                    var frameTimeMs = watch.ElapsedMilliseconds;
+                    OnDrawGraphics(frameCount++, frameTimeMs, (nowTicks - prevTicks) * 1000 / Stopwatch.Frequency);
+                }
+                else
+                {
+                    Thread.Sleep(1);
+                }
+            }
         }
 
-        /// <summary>
-        ///     Returns a value indicating whether this instance and a specified <see cref="T:System.Object" /> represent the same
-        ///     type and value.
-        /// </summary>
-        /// <param name="obj">The object to compare with this instance.</param>
-        /// <returns>
-        ///     <see langword="true" /> if <paramref name="obj" /> is a OverlayWindow and equal to this instance; otherwise,
-        ///     <see langword="false" />.
-        /// </returns>
         public override bool Equals(object obj)
         {
             return (obj as Canvas)?.Handle == Handle && (Handle != default || ReferenceEquals(this, obj));
         }
 
-        /// <summary>
-        ///     Adapts to another window in the position and size.
-        /// </summary>
-        /// <param name="windowHandle">The target window handle.</param>
-        /// <param name="attachToClientArea">A Boolean determining whether to fit to the client area of the target window.</param>
         public void FitTo(IntPtr windowHandle, bool attachToClientArea = false)
         {
+            var hWnd = new HWND(windowHandle);
             if (attachToClientArea)
             {
-                POINT clientPoint = default;
-                if (GetClientRect(windowHandle, out var client) && ClientToScreen(windowHandle, ref clientPoint))
+                if (Functions.GetClientRect(hWnd, out var client))
                 {
-                    Rectangle clientRect = client;
-                    clientRect.Location = clientPoint;
-                    Rect = clientRect;
+                    var cp = new POINT();
+                    Functions.ClientToScreen(hWnd, ref cp);
+                    Functions.MoveWindow(new HWND(Handle), cp.x, cp.y, client.Width, client.Height, false);
+                    X = cp.x; Y = cp.y;
+                    Width = client.Width; Height = client.Height;
                 }
             }
-            else if (GetWindowRect(windowHandle, out var rect))
+            else if (Functions.GetWindowRect(hWnd, out var rect))
             {
-                Rect = rect;
+                Functions.MoveWindow(new HWND(Handle), rect.left, rect.top, rect.Width, rect.Height, false);
+                X = rect.left; Y = rect.top;
+                Width = rect.Width; Height = rect.Height;
             }
         }
 
-        /// <summary>
-        ///     Returns the hash code for this instance.
-        /// </summary>
-        /// <returns>A 32-bit signed integer hash code.</returns>
-        public override int GetHashCode()
-        {
-            return Handle.GetHashCode();
-        }
+        public override int GetHashCode() => Handle.GetHashCode();
 
-        /// <summary>
-        ///     Places the OverlayWindow above the target window according to the windows z-order.
-        /// </summary>
-        /// <param name="windowHandle">The target window handle.</param>
         public void PlaceAbove(IntPtr windowHandle)
         {
-            var windowAboveParentWindow = GetWindow(windowHandle, GetWindowCommands.GW_HWNDPREV);
-
-            if (windowAboveParentWindow != Handle)
-                SetWindowPos(
-                    Handle,
-                    windowAboveParentWindow,
-                    0, 0, 0, 0,
-                    SetWindowPosFlags.SWP_NOACTIVATE | SetWindowPosFlags.SWP_NOMOVE | SetWindowPosFlags.SWP_NOSIZE |
-                    SetWindowPosFlags.SWP_ASYNCWINDOWPOS);
+            var prev = Functions.GetWindow(new HWND(windowHandle), GET_WINDOW_CMD.GW_HWNDPREV);
+            if (prev != Handle)
+                Functions.SetWindowPos(new HWND(Handle), prev, 0, 0, 0, 0,
+                    SET_WINDOW_POS_FLAGS.SWP_NOACTIVATE | SET_WINDOW_POS_FLAGS.SWP_NOMOVE |
+                    SET_WINDOW_POS_FLAGS.SWP_NOSIZE | SET_WINDOW_POS_FLAGS.SWP_ASYNCWINDOWPOS);
         }
 
-        /// <summary>
-        ///     Converts this OverlayWindow structure to a human-readable string.
-        /// </summary>
-        /// <returns>A string representation of this OverlayWindow.</returns>
         public override string ToString()
         {
             return OverrideHelper.ToString(
                 "Handle", Handle.ToString("X"),
                 "IsVisible", IsVisible.ToString(),
                 "IsTopmost", IsTopmost.ToString(),
-                "X", X.ToString(),
-                "Y", Y.ToString(),
-                "Width", Width.ToString(),
-                "Height", Height.ToString());
+                "X", X.ToString(), "Y", Y.ToString(),
+                "Width", Width.ToString(), "Height", Height.ToString());
         }
-
-        #region IDisposable Support
 
         private bool disposedValue;
 
-        /// <summary>
-        ///     Releases all resources used by this OverlayWindow.
-        /// </summary>
-        /// <param name="disposing">A Boolean value indicating whether this is called from the destructor.</param>
         protected override void Dispose(bool disposing)
         {
             if (!disposedValue)
@@ -338,16 +256,11 @@ namespace SharpD2D.Windows
             }
         }
 
-        /// <summary>
-        ///     Releases all resources used by this OverlayWindow.
-        /// </summary>
-        public void Dispose()
+        public new void Dispose()
         {
             base.Dispose(true);
             Dispose(true);
             GC.SuppressFinalize(this);
         }
-
-        #endregion IDisposable Support
     }
 }

@@ -1,7 +1,7 @@
-﻿using System;
-using SharpDX;
-using SharpDX.Direct2D1;
-using SharpDX.Mathematics.Interop;
+using System;
+using DirectN;
+using DirectN.Extensions;
+using DirectN.Extensions.Com;
 
 namespace SharpD2D.Drawing
 {
@@ -10,8 +10,8 @@ namespace SharpD2D.Drawing
     /// </summary>
     public class Geometry : IDisposable
     {
-        private readonly PathGeometry _geometry;
-        private readonly GeometrySink _sink;
+        private IComObject<ID2D1PathGeometry> _geometry;
+        private IComObject<ID2D1SimplifiedGeometrySink> _sink;
 
         private Geometry()
         {
@@ -27,7 +27,7 @@ namespace SharpD2D.Drawing
             if (!device.IsInitialized)
                 throw new InvalidOperationException("The render target needs to be initialized first");
 
-            _geometry = new PathGeometry(device.GetFactory());
+            _geometry = device.GetFactory().CreatePathGeometry();
             _sink = _geometry.Open();
 
             IsOpen = true;
@@ -37,6 +37,11 @@ namespace SharpD2D.Drawing
         ///     Determines whether this Geometry is open.
         /// </summary>
         public bool IsOpen { get; private set; }
+
+        /// <summary>
+        ///     Gets the native geometry.
+        /// </summary>
+        public IComObject<ID2D1PathGeometry> NativeGeometry => _geometry;
 
         /// <summary>
         ///     Allows an object to try to free resources and perform other cleanup operations before it is reclaimed by garbage
@@ -54,7 +59,7 @@ namespace SharpD2D.Drawing
         /// <param name="fill">A Boolean value determining whether this figure can be filled by a Graphics device.</param>
         public void BeginFigure(PointF point, bool fill = false)
         {
-            _sink.BeginFigure(point, fill ? FigureBegin.Filled : FigureBegin.Hollow);
+            _sink.Object.BeginFigure(point, fill ? D2D1_FIGURE_BEGIN.D2D1_FIGURE_BEGIN_FILLED : D2D1_FIGURE_BEGIN.D2D1_FIGURE_BEGIN_HOLLOW);
         }
 
         /// <summary>
@@ -64,20 +69,20 @@ namespace SharpD2D.Drawing
         /// <param name="fill">A Boolean value determining whether this figure can be filled by a Graphics device.</param>
         public void BeginFigure(Line line, bool fill = false)
         {
-            _sink.BeginFigure(line.Start, fill ? FigureBegin.Filled : FigureBegin.Hollow);
-            _sink.AddLine(line.End);
+            _sink.Object.BeginFigure(line.Start, fill ? D2D1_FIGURE_BEGIN.D2D1_FIGURE_BEGIN_FILLED : D2D1_FIGURE_BEGIN.D2D1_FIGURE_BEGIN_HOLLOW);
+            _sink.Object.AddLine(line.End);
         }
 
         /// <summary>
         ///     Ends the currently started figure.
         /// </summary>
         /// <param name="closed">
-        ///     A Boolean value indicating whether this figure should automatically be closen by the Graphics
+        ///     A Boolean value indicating whether this figure should automatically be closed by the Graphics
         ///     device.
         /// </param>
         public void EndFigure(bool closed = true)
         {
-            _sink.EndFigure(closed ? FigureEnd.Closed : FigureEnd.Open);
+            _sink.Object.EndFigure(closed ? D2D1_FIGURE_END.D2D1_FIGURE_END_CLOSED : D2D1_FIGURE_END.D2D1_FIGURE_END_OPEN);
         }
 
         /// <summary>
@@ -86,7 +91,7 @@ namespace SharpD2D.Drawing
         /// <param name="point">A PointF which will be added to this figure</param>
         public void AddPoint(PointF point)
         {
-            _sink.AddLine(point);
+            _sink.Object.AddLine(point);
         }
 
         /// <summary>
@@ -96,149 +101,27 @@ namespace SharpD2D.Drawing
         /// <param name="fill">A Boolean value determining whether this figure can be filled by a Graphics device.</param>
         public void AddRectangle(RectangleF rectangle, bool fill = false)
         {
-            _sink.BeginFigure(new RawVector2(rectangle.Left, rectangle.Top),
-                fill ? FigureBegin.Filled : FigureBegin.Hollow);
-            _sink.AddLine(new RawVector2(rectangle.Right, rectangle.Top));
-            _sink.AddLine(new RawVector2(rectangle.Right, rectangle.Bottom));
-            _sink.AddLine(new RawVector2(rectangle.Left, rectangle.Bottom));
-            _sink.EndFigure(FigureEnd.Closed);
+            _sink.Object.BeginFigure(new D2D_POINT_2F(rectangle.Left, rectangle.Top),
+                fill ? D2D1_FIGURE_BEGIN.D2D1_FIGURE_BEGIN_FILLED : D2D1_FIGURE_BEGIN.D2D1_FIGURE_BEGIN_HOLLOW);
+            _sink.Object.AddLine(new D2D_POINT_2F(rectangle.Right, rectangle.Top));
+            _sink.Object.AddLine(new D2D_POINT_2F(rectangle.Right, rectangle.Bottom));
+            _sink.Object.AddLine(new D2D_POINT_2F(rectangle.Left, rectangle.Bottom));
+            _sink.Object.EndFigure(D2D1_FIGURE_END.D2D1_FIGURE_END_CLOSED);
         }
 
         /// <summary>
-        ///     Adds a curved line to the currently open figure.
-        /// </summary>
-        /// <param name="point">The end point of the curved line.</param>
-        /// <param name="radius">The radius of the resulting arc in degrees.</param>
-        /// <param name="rotationAngle">A value determining the rotation angle this curve.</param>
-        public void AddCurve(PointF point, float radius, float rotationAngle = 0.0f)
-        {
-            var minus = radius < 0.0f;
-
-            if (minus) radius *= -1.0f;
-
-            var arc = new ArcSegment
-            {
-                ArcSize = radius >= 180.0f ? ArcSize.Large : ArcSize.Small,
-                Point = point,
-                RotationAngle = rotationAngle,
-                Size = new Size2F(radius, radius),
-                SweepDirection = minus ? SweepDirection.Clockwise : SweepDirection.CounterClockwise
-            };
-
-            _sink.AddArc(arc);
-        }
-
-        /// <summary>
-        ///     Adds a curved line to the currently open figure.
-        /// </summary>
-        /// <param name="point">The end point of the curved line.</param>
-        /// <param name="radius_x">The radius on the X-Axis of the resulting arc in degrees.</param>
-        /// <param name="radius_y">The radius on the Y-Axis of the resulting arc in degrees.</param>
-        /// <param name="rotationAngle">A value determining the rotation angle this curve.</param>
-        public void AddCurve(PointF point, float radius_x, float radius_y, float rotationAngle = 0.0f)
-        {
-            _sink.AddArc(new ArcSegment
-            {
-                Point = point,
-                Size = new Size2F(radius_x, radius_y),
-                RotationAngle = rotationAngle
-            });
-        }
-
-        /// <summary>
-        ///     Closes this Geometry and prevents further manipulation.
+        ///     Closes this Geometry.
         /// </summary>
         public void Close()
         {
             if (!IsOpen) return;
 
+            _sink.Object.Close();
+            _sink.Dispose();
+            _sink = null;
+
             IsOpen = false;
-
-            _sink.Close();
         }
-
-        /// <summary>
-        ///     Returns a value indicating whether this instance and a specified <see cref="T:System.Object" /> represent the same
-        ///     type and value.
-        /// </summary>
-        /// <param name="obj">The object to compare with this instance.</param>
-        /// <returns>
-        ///     <see langword="true" /> if <paramref name="obj" /> is a Geometry and equal to this instance; otherwise,
-        ///     <see langword="false" />.
-        /// </returns>
-        public override bool Equals(object obj)
-        {
-            if (obj is Geometry geometry)
-                return geometry.IsOpen == IsOpen
-                       && geometry._geometry.NativePointer == _geometry.NativePointer;
-            return false;
-        }
-
-        /// <summary>
-        ///     Returns a value indicating whether two specified instances of Geometry represent the same value.
-        /// </summary>
-        /// <param name="value">An object to compare to this instance.</param>
-        /// <returns>
-        ///     <see langword="true" /> if <paramref name="value" /> is equal to this instance; otherwise,
-        ///     <see langword="false" />.
-        /// </returns>
-        public bool Equals(Geometry value)
-        {
-            return value != null
-                   && value.IsOpen == IsOpen
-                   && value._geometry.NativePointer == _geometry.NativePointer;
-        }
-
-        /// <summary>
-        ///     Returns the hash code for this instance.
-        /// </summary>
-        /// <returns>A 32-bit signed integer hash code.</returns>
-        public override int GetHashCode()
-        {
-            return OverrideHelper.HashCodes(
-                IsOpen.GetHashCode(),
-                _geometry.NativePointer.GetHashCode());
-        }
-
-        /// <summary>
-        ///     Converts this Geometry instance to a human-readable string.
-        /// </summary>
-        /// <returns>A string representation of this Geometry.</returns>
-        public override string ToString()
-        {
-            return OverrideHelper.ToString(
-                "Geometry", "PathGeometry",
-                "FigureCount", _geometry.FigureCount.ToString(),
-                "SegmentCount", _geometry.SegmentCount.ToString(),
-                "IsOpen", IsOpen.ToString());
-        }
-
-        /// <summary>
-        ///     Returns the Direct2D Geometry used by this object.
-        /// </summary>
-        /// <param name="geometry"></param>
-        public static implicit operator SharpDX.Direct2D1.Geometry(Geometry geometry)
-        {
-            return geometry._geometry;
-        }
-
-        /// <summary>
-        ///     Returns a value indicating whether two specified instances of Geometry represent the same value.
-        /// </summary>
-        /// <param name="left">The first object to compare.</param>
-        /// <param name="right">The second object to compare.</param>
-        /// <returns>
-        ///     <see langword="true" /> if <paramref name="left" /> and <paramref name="right" /> are equal; otherwise,
-        ///     <see langword="false" />.
-        /// </returns>
-        public static bool Equals(Geometry left, Geometry right)
-        {
-            return left?.Equals(right) == true;
-        }
-
-        #region IDisposable Support
-
-        private bool disposedValue;
 
         /// <summary>
         ///     Releases all resources used by this Geometry.
@@ -246,20 +129,11 @@ namespace SharpD2D.Drawing
         /// <param name="disposing">A Boolean value indicating whether this is called from the destructor.</param>
         protected virtual void Dispose(bool disposing)
         {
-            if (!disposedValue)
+            if (disposing)
             {
-                try
-                {
-                    if (IsOpen) _sink.Close();
-
-                    _sink.Dispose();
-                    _geometry.Dispose();
-                }
-                catch
-                {
-                }
-
-                disposedValue = true;
+                if (IsOpen) Close();
+                _geometry?.Dispose();
+                _geometry = null;
             }
         }
 
@@ -271,7 +145,5 @@ namespace SharpD2D.Drawing
             Dispose(true);
             GC.SuppressFinalize(this);
         }
-
-        #endregion
     }
 }

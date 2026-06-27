@@ -1,4 +1,5 @@
-﻿using SharpDX.Direct2D1;
+﻿using DirectN;
+using DirectN.Extensions.Com;
 
 namespace SharpD2D.Drawing
 {
@@ -8,8 +9,8 @@ namespace SharpD2D.Drawing
     public interface IBrush
     {
         /// <summary>
-        ///     Gets or sets the Brush
+        ///     Gets the underlying native brush.
         /// </summary>
-        Brush Brush { get; set; }
+        IComObject<ID2D1Brush> NativeBrush { get; }
     }
 }

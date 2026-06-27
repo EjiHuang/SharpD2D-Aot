@@ -1,6 +1,5 @@
 ﻿using System.Runtime.InteropServices;
-using PInvoke;
-using SharpDX.Mathematics.Interop;
+using DirectN;
 
 namespace SharpD2D.Drawing
 {
@@ -109,9 +108,9 @@ namespace SharpD2D.Drawing
         ///     Converts this Circle to a SharpDX ellipse.
         /// </summary>
         /// <param name="circle">A Circle structure.</param>
-        public static implicit operator SharpDX.Direct2D1.Ellipse(Circle circle)
+        public static implicit operator D2D1_ELLIPSE(Circle circle)
         {
-            return new SharpDX.Direct2D1.Ellipse(circle.Location, circle.Radius, circle.Radius);
+            return new D2D1_ELLIPSE(circle.Location.X, circle.Location.Y, circle.Radius, circle.Radius);
         }
 
         /// <summary>
@@ -264,9 +263,9 @@ namespace SharpD2D.Drawing
         ///     Converts an Ellipse to a SharpDX Ellipse.
         /// </summary>
         /// <param name="ellipse">An Ellipse structure.</param>
-        public static implicit operator SharpDX.Direct2D1.Ellipse(Ellipse ellipse)
+        public static implicit operator D2D1_ELLIPSE(Ellipse ellipse)
         {
-            return new SharpDX.Direct2D1.Ellipse(ellipse.Location, ellipse.RadiusX, ellipse.RadiusY);
+            return new D2D1_ELLIPSE(ellipse.Location.X, ellipse.Location.Y, ellipse.RadiusX, ellipse.RadiusY);
         }
 
         /// <summary>
@@ -497,21 +496,39 @@ namespace SharpD2D.Drawing
         }
 
         /// <summary>
-        ///     Converts a PointF structure to a SharpDX RawVector2.
+        ///     Converts a PointF structure to a DirectN D2D_POINT_2F.
         /// </summary>
         /// <param name="point">A PointF structure.</param>
-        public static implicit operator RawVector2(PointF point)
+        public static implicit operator D2D_POINT_2F(PointF point)
         {
-            return new RawVector2(point.X, point.Y);
+            return new D2D_POINT_2F(point.X, point.Y);
         }
 
         /// <summary>
-        ///     Converts a SharpDX RawVector2 structure to a PointF structure.
+        ///     Converts a DirectN D2D_POINT_2F structure to a PointF structure.
         /// </summary>
-        /// <param name="vector">A SharpDX RawVector2.</param>
-        public static implicit operator PointF(RawVector2 vector)
+        /// <param name="point">A D2D_POINT_2F.</param>
+        public static implicit operator PointF(D2D_POINT_2F point)
         {
-            return new PointF(vector.X, vector.Y);
+            return new PointF(point.x, point.y);
+        }
+
+        /// <summary>
+        ///     Converts a PointF structure to a DirectN D2D_VECTOR_2F.
+        /// </summary>
+        /// <param name="point">A PointF structure.</param>
+        public static implicit operator D2D_VECTOR_2F(PointF point)
+        {
+            return new D2D_VECTOR_2F(point.X, point.Y);
+        }
+
+        /// <summary>
+        ///     Converts a DirectN D2D_VECTOR_2F structure to a PointF structure.
+        /// </summary>
+        /// <param name="vector">A D2D_VECTOR_2F.</param>
+        public static implicit operator PointF(D2D_VECTOR_2F vector)
+        {
+            return new PointF(vector.x, vector.y);
         }
 
         public static explicit operator PointF(Point p)
@@ -629,18 +646,18 @@ namespace SharpD2D.Drawing
         ///     Converts a PointF structure to a SharpDX RawVector2.
         /// </summary>
         /// <param name="point">A PointF structure.</param>
-        public static implicit operator RawVector2(Point point)
+        public static implicit operator D2D_VECTOR_2F(Point point)
         {
-            return new RawVector2(point.X, point.Y);
+            return new D2D_VECTOR_2F(point.X, point.Y);
         }
 
         /// <summary>
-        ///     Converts a SharpDX RawVector2 structure to a PointF structure.
+        ///     Converts a D2D_VECTOR_2F structure to a Point structure.
         /// </summary>
-        /// <param name="vector">A SharpDX RawVector2.</param>
-        public static implicit operator Point(RawVector2 vector)
+        /// <param name="vector">A D2D_VECTOR_2F.</param>
+        public static implicit operator Point(D2D_VECTOR_2F vector)
         {
-            return new Point(vector.X, vector.Y);
+            return new Point(vector.x, vector.y);
         }
 
         public static implicit operator POINT(Point p)
@@ -809,19 +826,14 @@ namespace SharpD2D.Drawing
         ///     Converts a RectangleF structure to a SharpDX RawRectangleF.
         /// </summary>
         /// <param name="rectangle">A Rectangle structure.</param>
-        public static implicit operator RawRectangle(Rectangle rectangle)
+        public static implicit operator RECT(Rectangle rect)
         {
-            return new RawRectangle(rectangle.Left, rectangle.Top, rectangle.Right, rectangle.Bottom);
+            return new RECT { left = rect.Left, top = rect.Top, right = rect.Right, bottom = rect.Bottom };
         }
 
         public static implicit operator Rectangle(RECT rect)
         {
             return new Rectangle(rect.left, rect.top, rect.right, rect.bottom);
-        }
-
-        public static implicit operator RECT(Rectangle rect)
-        {
-            return new RECT { left = rect.Left, top = rect.Top, right = rect.Right, bottom = rect.Bottom };
         }
 
         public static explicit operator Rectangle(RectangleF rect)
@@ -1008,9 +1020,9 @@ namespace SharpD2D.Drawing
         ///     Converts a RectangleF structure to a SharpDX RawRectangleF.
         /// </summary>
         /// <param name="rectangle">A RectangleF structure.</param>
-        public static implicit operator RawRectangleF(RectangleF rectangle)
+        public static implicit operator D2D_RECT_F(RectangleF rectangle)
         {
-            return new RawRectangleF(rectangle.Left, rectangle.Top, rectangle.Right, rectangle.Bottom);
+            return new D2D_RECT_F(rectangle.Left, rectangle.Top, rectangle.Right, rectangle.Bottom);
         }
 
 
@@ -1200,13 +1212,13 @@ namespace SharpD2D.Drawing
         ///     Converts a RoundedRectangle structure to a SharpDX RoundedRectangle.
         /// </summary>
         /// <param name="rectangle">A RoundedRectangle struct</param>
-        public static implicit operator SharpDX.Direct2D1.RoundedRectangle(RoundedRectangle rectangle)
+        public static implicit operator D2D1_ROUNDED_RECT(RoundedRectangle rectangle)
         {
-            return new SharpDX.Direct2D1.RoundedRectangle
+            return new D2D1_ROUNDED_RECT
             {
-                RadiusX = rectangle.RadiusX,
-                RadiusY = rectangle.RadiusY,
-                Rect = rectangle.RectangleF
+                radiusX = rectangle.RadiusX,
+                radiusY = rectangle.RadiusY,
+                rect = rectangle.RectangleF
             };
         }
 

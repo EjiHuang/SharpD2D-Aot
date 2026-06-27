@@ -1,17 +1,9 @@
-﻿using System;
+using System;
 using System.Diagnostics;
 using System.IO;
-using SharpDX;
-using SharpDX.Direct2D1;
-using SharpDX.DirectWrite;
-using SharpDX.DXGI;
-using SharpDX.Mathematics.Interop;
-using static PInvoke.User32;
-using AlphaMode = SharpDX.Direct2D1.AlphaMode;
-using Factory = SharpDX.Direct2D1.Factory;
-using FactoryType = SharpDX.Direct2D1.FactoryType;
-using FontFactory = SharpDX.DirectWrite.Factory;
-using TextAntialiasMode = SharpDX.Direct2D1.TextAntialiasMode;
+using DirectN;
+using DirectN.Extensions;
+using DirectN.Extensions.Com;
 
 namespace SharpD2D.Drawing
 {
@@ -21,16 +13,15 @@ namespace SharpD2D.Drawing
     public class Graphics : IDisposable
     {
         private readonly Stopwatch _watch;
-        private WindowRenderTarget _device;
-        private HwndRenderTargetProperties _deviceProperties;
-        private Factory _factory;
-        private FontFactory _fontFactory;
+        private IComObject<ID2D1HwndRenderTarget> _device;
+        private IComObject<ID2D1Factory> _factory;
+        private IComObject<IDWriteFactory> _fontFactory;
 
         private volatile int _fpsCount;
         private volatile bool _resize;
         private volatile int _resizeHeight;
         private volatile int _resizeWidth;
-        private StrokeStyle _strokeStyle;
+        private IComObject<ID2D1StrokeStyle> _strokeStyle;
 
         /// <summary>
         ///     Initializes a new Graphics surface.
@@ -132,6 +123,11 @@ namespace SharpD2D.Drawing
         public IntPtr WindowHandle { get; set; }
 
         /// <summary>
+        ///     Occurs when the underlying device was recreated and resources need to be recreated.
+        /// </summary>
+        public event EventHandler<RecreateResourcesEventArgs> RecreateResources;
+
+        /// <summary>
         ///     Allows an object to try to free resources and perform other cleanup operations before it is reclaimed by garbage
         ///     collection.
         /// </summary>
@@ -149,58 +145,51 @@ namespace SharpD2D.Drawing
 
         private void CreateDeviceForCurrentSurface()
         {
-            _deviceProperties = new HwndRenderTargetProperties
+            var hwndProps = new D2D1_HWND_RENDER_TARGET_PROPERTIES
             {
-                Hwnd = WindowHandle,
-                PixelSize = new Size2(Width, Height),
-                PresentOptions = VSync ? PresentOptions.None : PresentOptions.Immediately
+                hwnd = new HWND(WindowHandle),
+                pixelSize = new D2D_SIZE_U((uint)Width, (uint)Height),
+                presentOptions = VSync ? D2D1_PRESENT_OPTIONS.D2D1_PRESENT_OPTIONS_NONE : D2D1_PRESENT_OPTIONS.D2D1_PRESENT_OPTIONS_IMMEDIATELY
             };
 
-            // documentation: https://docs.microsoft.com/en-us/windows/desktop/direct2d/supported-pixel-formats-and-alpha-modes those 3 PixelFormats
-            // are the only supported ones of a HwndRenderTarget (WindowRenderTarget)
-            var renderProperties = new RenderTargetProperties(
-                RenderTargetType.Default,
-
-                // msdn: B8G8R8A8_UNorm should be used for best performance
-                new PixelFormat(Format.B8G8R8A8_UNorm,
-                    AlphaMode.Premultiplied), // supports hardware rendering & software rendering
-                96.0f,
-                96.0f,
-                RenderTargetUsage.None,
-                FeatureLevel.Level_DEFAULT);
+            var renderProperties = new D2D1_RENDER_TARGET_PROPERTIES
+            {
+                type = D2D1_RENDER_TARGET_TYPE.D2D1_RENDER_TARGET_TYPE_DEFAULT,
+                pixelFormat = new D2D1_PIXEL_FORMAT { format = DXGI_FORMAT.DXGI_FORMAT_B8G8R8A8_UNORM, alphaMode = D2D1_ALPHA_MODE.D2D1_ALPHA_MODE_PREMULTIPLIED },
+                dpiX = 96.0f,
+                dpiY = 96.0f,
+                usage = D2D1_RENDER_TARGET_USAGE.D2D1_RENDER_TARGET_USAGE_NONE,
+                minLevel = D2D1_FEATURE_LEVEL.D2D1_FEATURE_LEVEL_DEFAULT
+            };
 
             try
             {
-                _device = new WindowRenderTarget(_factory, renderProperties, _deviceProperties);
+                _device = _factory.CreateHwndRenderTarget(hwndProps, renderProperties);
             }
-            catch (SharpDXException)
+            catch
             {
                 try
                 {
-                    renderProperties.PixelFormat =
-                        new PixelFormat(Format.R8G8B8A8_UNorm, AlphaMode.Premultiplied); // supports hardware rendering
-                    _device = new WindowRenderTarget(_factory, renderProperties, _deviceProperties);
+                    renderProperties.pixelFormat = new D2D1_PIXEL_FORMAT { format = DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM, alphaMode = D2D1_ALPHA_MODE.D2D1_ALPHA_MODE_PREMULTIPLIED };
+                    _device = _factory.CreateHwndRenderTarget(hwndProps, renderProperties);
                 }
-                catch (SharpDXException)
+                catch
                 {
-                    renderProperties.PixelFormat =
-                        new PixelFormat(Format.Unknown,
-                            AlphaMode.Premultiplied); // supports hardware & software rendering
-                    _device = new WindowRenderTarget(_factory, renderProperties, _deviceProperties);
+                    renderProperties.pixelFormat = new D2D1_PIXEL_FORMAT { format = DXGI_FORMAT.DXGI_FORMAT_UNKNOWN, alphaMode = D2D1_ALPHA_MODE.D2D1_ALPHA_MODE_PREMULTIPLIED };
+                    _device = _factory.CreateHwndRenderTarget(hwndProps, renderProperties);
 
                     throw;
                 }
             }
 
-            _device.AntialiasMode =
+            _device.SetAntialiasMode(
                 PerPrimitiveAntiAliasing
-                    ? AntialiasMode.PerPrimitive
-                    : AntialiasMode.Aliased; // anti aliasing does not preserve colors correctly
-            _device.TextAntialiasMode =
+                    ? D2D1_ANTIALIAS_MODE.D2D1_ANTIALIAS_MODE_PER_PRIMITIVE
+                    : D2D1_ANTIALIAS_MODE.D2D1_ANTIALIAS_MODE_ALIASED);
+            _device.SetTextAntialiasMode(
                 TextAntiAliasing
-                    ? TextAntialiasMode.Grayscale
-                    : TextAntialiasMode
-                        .Aliased; // using ClearType makes text invisible on white background (white underlying windows)
+                    ? D2D1_TEXT_ANTIALIAS_MODE.D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE
+                    : D2D1_TEXT_ANTIALIAS_MODE.D2D1_TEXT_ANTIALIAS_MODE_ALIASED);
         }
 
         /// <summary>
@@ -221,30 +210,25 @@ namespace SharpD2D.Drawing
         ///     Starts a new Scene (Frame).
         /// </summary>
         public void BeginScene()
-        {
-            if (!IsInitialized) throw ThrowHelper.DeviceNotInitialized();
-            if (IsDrawing) return;
+            {
+                if (!IsInitialized) throw ThrowHelper.DeviceNotInitialized();
+                if (IsDrawing) return;
 
-            if (_resize)
-                try
-                {
-                    _device.Resize(new Size2(_resizeWidth, _resizeHeight));
+                if (_resize)
+                    try
+                    {
+                        _device.Resize(new D2D_SIZE_U((uint)_resizeWidth, (uint)_resizeHeight));
+                        Width = _resizeWidth;
+                        Height = _resizeHeight;
+                        _resize = false;
+                    }
+                    catch { }
 
-                    Width = _resizeWidth;
-                    Height = _resizeHeight;
+                if (MeasureFPS && !_watch.IsRunning) _watch.Restart();
 
-                    _resize = false;
-                }
-                catch
-                {
-                } // idk sometimes fails?
-
-            if (MeasureFPS && !_watch.IsRunning) _watch.Restart();
-
-            _device.BeginDraw();
-
-            IsDrawing = true;
-        }
+                _device.BeginDraw();
+                IsDrawing = true;
+            }
 
         /// <summary>
         ///     Clears the current Scene (Frame) using a transparent background color.
@@ -253,7 +237,7 @@ namespace SharpD2D.Drawing
         {
             if (!IsDrawing) throw ThrowHelper.UseBeginScene();
 
-            _device.Clear(null);
+            _device.Object.Clear(null);
         }
 
         /// <summary>
@@ -264,7 +248,7 @@ namespace SharpD2D.Drawing
         {
             if (!IsDrawing) throw ThrowHelper.UseBeginScene();
 
-            _device.Clear(color);
+            _device.Object.Clear(color);
         }
 
         /// <summary>
@@ -275,7 +259,7 @@ namespace SharpD2D.Drawing
         {
             if (!IsDrawing) throw ThrowHelper.UseBeginScene();
 
-            _device.Clear(brush.Color);
+            _device.Object.Clear(brush.Color);
         }
 
         /// <summary>
@@ -347,11 +331,11 @@ namespace SharpD2D.Drawing
         /// <param name="pitch"></param>
         /// <param name="format"></param>
         /// <returns></returns>
-        public Image CreateImage(int width, int height, PixelFormat format)
+        public Image CreateImage(int width, int height, D2D1_PIXEL_FORMAT format)
         {
             ThrowIfNotInitialized();
 
-            return new Image(_device, new Size2(width, height), format);
+            return new Image(_device, new D2D_SIZE_U((uint)width, (uint)height), format);
         }
 
         /// <summary>
@@ -404,18 +388,17 @@ namespace SharpD2D.Drawing
         {
             if (!IsDrawing) ThrowHelper.UseBeginScene();
 
-            _device.Transform = matrix;
+            _device.SetTransform((D2D_MATRIX_3X2_F)matrix);
         }
 
         /// <summary>
-        ///     Removes the transformation matrix. it does not change the position, shape, or size of any drawing operations
-        ///     anymore.
+        ///     Removes the transformation matrix.
         /// </summary>
         public void TransformEnd()
         {
             if (!IsDrawing) ThrowHelper.UseBeginScene();
 
-            _device.Transform = TransformationMatrix.Identity;
+            _device.SetTransform((D2D_MATRIX_3X2_F)TransformationMatrix.Identity);
         }
 
         /// <summary>
@@ -429,8 +412,8 @@ namespace SharpD2D.Drawing
         {
             if (!IsDrawing) ThrowHelper.UseBeginScene();
 
-            _device.PushAxisAlignedClip(new RawRectangleF(left, top, right, bottom),
-                PerPrimitiveAntiAliasing ? AntialiasMode.PerPrimitive : AntialiasMode.Aliased);
+            _device.Object.PushAxisAlignedClip(new D2D_RECT_F(left, top, right, bottom),
+                PerPrimitiveAntiAliasing ? D2D1_ANTIALIAS_MODE.D2D1_ANTIALIAS_MODE_PER_PRIMITIVE : D2D1_ANTIALIAS_MODE.D2D1_ANTIALIAS_MODE_ALIASED);
         }
 
         /// <summary>
@@ -450,7 +433,7 @@ namespace SharpD2D.Drawing
         {
             if (!IsDrawing) ThrowHelper.UseBeginScene();
 
-            _device.PopAxisAlignedClip();
+            _device.Object.PopAxisAlignedClip();
         }
 
         /// <summary>
@@ -465,8 +448,8 @@ namespace SharpD2D.Drawing
         {
             if (!IsDrawing) ThrowHelper.UseBeginScene();
 
-            _device.DrawEllipse(new SharpDX.Direct2D1.Ellipse(new RawVector2(x, y), radius, radius), brush.Brush,
-                stroke, _strokeStyle);
+            _device.Object.DrawEllipse(new D2D1_ELLIPSE(x, y, radius, radius), brush.NativeBrush.Object,
+                stroke, _strokeStyle?.Object);
         }
 
         /// <summary>
@@ -505,8 +488,8 @@ namespace SharpD2D.Drawing
         {
             if (!IsDrawing) throw ThrowHelper.UseBeginScene();
 
-            _device.DrawEllipse(new SharpDX.Direct2D1.Ellipse(new RawVector2(x, y), radiusX, radiusY), brush.Brush,
-                stroke, _strokeStyle);
+            _device.Object.DrawEllipse(new D2D1_ELLIPSE(x, y, radiusX, radiusY), brush.NativeBrush.Object,
+                stroke, _strokeStyle?.Object);
         }
 
         /// <summary>
@@ -543,7 +526,7 @@ namespace SharpD2D.Drawing
         {
             if (!IsDrawing) throw ThrowHelper.UseBeginScene();
 
-            _device.DrawGeometry(geometry, brush.Brush, stroke, _strokeStyle);
+            _device.Object.DrawGeometry(geometry.NativeGeometry.Object, brush.NativeBrush.Object, stroke, _strokeStyle?.Object);
         }
 
         /// <summary>
@@ -559,8 +542,8 @@ namespace SharpD2D.Drawing
         {
             if (!IsDrawing) throw ThrowHelper.UseBeginScene();
 
-            _device.DrawLine(new RawVector2(startX, startY), new RawVector2(endX, endY), brush.Brush, stroke,
-                _strokeStyle);
+            _device.Object.DrawLine(new D2D_POINT_2F(startX, startY), new D2D_POINT_2F(endX, endY), brush.NativeBrush.Object, stroke,
+                _strokeStyle?.Object);
         }
 
         /// <summary>
@@ -599,7 +582,7 @@ namespace SharpD2D.Drawing
         {
             if (!IsDrawing) throw ThrowHelper.UseBeginScene();
 
-            _device.DrawRectangle(new RawRectangleF(left, top, right, bottom), brush.Brush, stroke, _strokeStyle);
+            _device.Object.DrawRectangle(new D2D_RECT_F(left, top, right, bottom), brush.NativeBrush.Object, stroke, _strokeStyle?.Object);
         }
 
         /// <summary>
@@ -628,14 +611,14 @@ namespace SharpD2D.Drawing
         {
             if (!IsDrawing) throw ThrowHelper.UseBeginScene();
 
-            var rect = new SharpDX.Direct2D1.RoundedRectangle
+            var rect = new D2D1_ROUNDED_RECT
             {
-                RadiusX = radius,
-                RadiusY = radius,
-                Rect = new RawRectangleF(left, top, right, bottom)
+                radiusX = radius,
+                radiusY = radius,
+                rect = new D2D_RECT_F(left, top, right, bottom)
             };
 
-            _device.DrawRoundedRectangle(rect, brush.Brush, stroke, _strokeStyle);
+            _device.Object.DrawRoundedRectangle(rect, brush.NativeBrush.Object, stroke, _strokeStyle?.Object);
         }
 
         /// <summary>
@@ -648,7 +631,7 @@ namespace SharpD2D.Drawing
         {
             if (!IsDrawing) throw ThrowHelper.UseBeginScene();
 
-            _device.DrawRoundedRectangle(rectangle, brush.Brush, stroke, _strokeStyle);
+            _device.Object.DrawRoundedRectangle(rectangle, brush.NativeBrush.Object, stroke, _strokeStyle?.Object);
         }
 
         /// <summary>
@@ -667,18 +650,18 @@ namespace SharpD2D.Drawing
         {
             if (!IsDrawing) throw ThrowHelper.UseBeginScene();
 
-            var geometry = new PathGeometry(_factory);
+            var geometry = _factory.CreatePathGeometry();
 
             var sink = geometry.Open();
 
-            sink.BeginFigure(new RawVector2(aX, aY), FigureBegin.Hollow);
-            sink.AddLine(new RawVector2(bX, bY));
-            sink.AddLine(new RawVector2(cX, cY));
-            sink.EndFigure(FigureEnd.Closed);
+            sink.BeginFigure(new D2D_POINT_2F(aX, aY), D2D1_FIGURE_BEGIN.D2D1_FIGURE_BEGIN_HOLLOW);
+            sink.AddLine(new D2D_POINT_2F(bX, bY));
+            sink.AddLine(new D2D_POINT_2F(cX, cY));
+            sink.EndFigure(D2D1_FIGURE_END.D2D1_FIGURE_END_CLOSED);
 
             sink.Close();
 
-            _device.DrawGeometry(geometry, brush.Brush, stroke, _strokeStyle);
+            _device.Object.DrawGeometry(geometry.Object, brush.NativeBrush.Object, stroke, _strokeStyle?.Object);
 
             sink.Dispose();
             geometry.Dispose();
@@ -718,10 +701,10 @@ namespace SharpD2D.Drawing
 
             try
             {
-                _strokeStyle.Dispose();
-                _fontFactory.Dispose();
-                _factory.Dispose();
-                _device.Dispose();
+                _strokeStyle?.Dispose();
+                _fontFactory?.Dispose();
+                _factory?.Dispose();
+                _device?.Dispose();
             }
             catch
             {
@@ -809,19 +792,19 @@ namespace SharpD2D.Drawing
             var width = right - left;
             var height = bottom - top;
 
-            var geometry = new PathGeometry(_factory);
+            var geometry = _factory.CreatePathGeometry();
 
             var sink = geometry.Open();
 
-            sink.BeginFigure(new RawVector2(left, top), FigureBegin.Filled);
-            sink.AddLine(new RawVector2(left + width, top));
-            sink.AddLine(new RawVector2(left + width, top + height));
-            sink.AddLine(new RawVector2(left, top + height));
-            sink.EndFigure(FigureEnd.Closed);
+            sink.BeginFigure(new D2D_POINT_2F(left, top), D2D1_FIGURE_BEGIN.D2D1_FIGURE_BEGIN_FILLED);
+            sink.AddLine(new D2D_POINT_2F(left + width, top));
+            sink.AddLine(new D2D_POINT_2F(left + width, top + height));
+            sink.AddLine(new D2D_POINT_2F(left, top + height));
+            sink.EndFigure(D2D1_FIGURE_END.D2D1_FIGURE_END_CLOSED);
 
             sink.Close();
-            _device.DrawGeometry(geometry, outline.Brush, stroke);
-            _device.FillGeometry(geometry, fill.Brush);
+            _device.Object.DrawGeometry(geometry.Object, outline.NativeBrush.Object, stroke, null);
+            _device.Object.FillGeometry(geometry.Object, fill.NativeBrush.Object, null);
 
             sink.Dispose();
             geometry.Dispose();
@@ -851,7 +834,7 @@ namespace SharpD2D.Drawing
         {
             if (!IsDrawing) ThrowHelper.UseBeginScene();
 
-            _device.DrawEllipse(new SharpDX.Direct2D1.Ellipse(new RawVector2(x, y), radius, radius), brush.Brush,
+            _device.Object.DrawEllipse(new D2D1_ELLIPSE(x, y, radius, radius), brush.NativeBrush.Object,
                 stroke);
         }
 
@@ -946,7 +929,7 @@ namespace SharpD2D.Drawing
         {
             if (!IsDrawing) throw ThrowHelper.UseBeginScene();
 
-            _device.DrawEllipse(new SharpDX.Direct2D1.Ellipse(new RawVector2(x, y), radiusX, radiusY), brush.Brush,
+            _device.Object.DrawEllipse(new D2D1_ELLIPSE(x, y, radiusX, radiusY), brush.NativeBrush.Object,
                 stroke);
         }
 
@@ -984,7 +967,7 @@ namespace SharpD2D.Drawing
         {
             if (!IsDrawing) throw ThrowHelper.UseBeginScene();
 
-            _device.DrawGeometry(geometry, brush.Brush, stroke);
+            _device.Object.DrawGeometry(geometry.NativeGeometry.Object, brush.NativeBrush.Object, stroke, null);
         }
 
         /// <summary>
@@ -1003,11 +986,11 @@ namespace SharpD2D.Drawing
         {
             if (!IsDrawing) throw ThrowHelper.UseBeginScene();
 
-            var outer = new RawRectangleF(left, top, right, bottom);
+            var outer = new D2D_RECT_F(left, top, right, bottom);
 
             if (percentage < 1.0f)
             {
-                _device.DrawRectangle(outer, outline.Brush, stroke);
+                _device.Object.DrawRectangle(outer, outline.NativeBrush.Object, stroke);
             }
             else
             {
@@ -1016,11 +999,11 @@ namespace SharpD2D.Drawing
 
                 var halfStroke = stroke * 0.5f;
 
-                var inner = new RawRectangleF(left + halfStroke, top + (height - filledHeight) + halfStroke,
+                var inner = new D2D_RECT_F(left + halfStroke, top + (height - filledHeight) + halfStroke,
                     right - halfStroke, bottom - halfStroke);
 
-                _device.FillRectangle(inner, fill.Brush);
-                _device.DrawRectangle(outer, outline.Brush, stroke);
+                _device.Object.FillRectangle(inner, fill.NativeBrush.Object);
+                _device.Object.DrawRectangle(outer, outline.NativeBrush.Object, stroke);
             }
         }
 
@@ -1063,12 +1046,17 @@ namespace SharpD2D.Drawing
         {
             if (!IsDrawing) throw ThrowHelper.UseBeginScene();
 
-            _device.DrawBitmap(
-                image.Bitmap,
-                rectangle,
-                opacity,
-                linearScale ? BitmapInterpolationMode.Linear : BitmapInterpolationMode.NearestNeighbor,
-                new RawRectangleF(0, 0, image.Bitmap.PixelSize.Width, image.Bitmap.PixelSize.Height));
+            var destRect = (D2D_RECT_F)rectangle;
+            var srcRect = new D2D_RECT_F(0, 0, image.Bitmap.GetPixelSize().width, image.Bitmap.GetPixelSize().height);
+            unsafe
+            {
+                _device.Object.DrawBitmap(
+                    image.Bitmap?.Object!,
+                    (nint)(&destRect),
+                    opacity,
+                    linearScale ? D2D1_BITMAP_INTERPOLATION_MODE.D2D1_BITMAP_INTERPOLATION_MODE_LINEAR : D2D1_BITMAP_INTERPOLATION_MODE.D2D1_BITMAP_INTERPOLATION_MODE_NEAREST_NEIGHBOR,
+                    (nint)(&srcRect));
+            }
         }
 
         /// <summary>
@@ -1100,7 +1088,7 @@ namespace SharpD2D.Drawing
         {
             if (!IsDrawing) throw ThrowHelper.UseBeginScene();
 
-            _device.DrawLine(new RawVector2(startX, startY), new RawVector2(endX, endY), brush.Brush, stroke);
+            _device.Object.DrawLine(new D2D_POINT_2F(startX, startY), new D2D_POINT_2F(endX, endY), brush.NativeBrush.Object, stroke);
         }
 
         /// <summary>
@@ -1139,7 +1127,7 @@ namespace SharpD2D.Drawing
         {
             if (!IsDrawing) throw ThrowHelper.UseBeginScene();
 
-            _device.DrawRectangle(new RawRectangleF(left, top, right, bottom), brush.Brush, stroke);
+            _device.Object.DrawRectangle(new D2D_RECT_F(left, top, right, bottom), brush.NativeBrush.Object, stroke);
         }
 
         /// <summary>
@@ -1171,39 +1159,39 @@ namespace SharpD2D.Drawing
 
             var length = (int)((width + height) / 2.0f * 0.2f);
 
-            var first = new RawVector2(left, top);
-            var second = new RawVector2(left, top + length);
-            var third = new RawVector2(left + length, top);
+            var first = new D2D_POINT_2F(left, top);
+            var second = new D2D_POINT_2F(left, top + length);
+            var third = new D2D_POINT_2F(left + length, top);
 
-            _device.DrawLine(first, second, brush.Brush, stroke);
-            _device.DrawLine(first, third, brush.Brush, stroke);
+            _device.Object.DrawLine(first, second, brush.NativeBrush.Object, stroke);
+            _device.Object.DrawLine(first, third, brush.NativeBrush.Object, stroke);
 
-            first.Y += height;
-            second.Y = first.Y - length;
-            third.Y = first.Y;
-            third.X = first.X + length;
+            first.y += height;
+            second.y = first.y - length;
+            third.y = first.y;
+            third.x = first.x + length;
 
-            _device.DrawLine(first, second, brush.Brush, stroke);
-            _device.DrawLine(first, third, brush.Brush, stroke);
+            _device.Object.DrawLine(first, second, brush.NativeBrush.Object, stroke);
+            _device.Object.DrawLine(first, third, brush.NativeBrush.Object, stroke);
 
-            first.X = left + width;
-            first.Y = top;
-            second.X = first.X - length;
-            second.Y = first.Y;
-            third.X = first.X;
-            third.Y = first.Y + length;
+            first.x = left + width;
+            first.y = top;
+            second.x = first.x - length;
+            second.y = first.y;
+            third.x = first.x;
+            third.y = first.y + length;
 
-            _device.DrawLine(first, second, brush.Brush, stroke);
-            _device.DrawLine(first, third, brush.Brush, stroke);
+            _device.Object.DrawLine(first, second, brush.NativeBrush.Object, stroke);
+            _device.Object.DrawLine(first, third, brush.NativeBrush.Object, stroke);
 
-            first.Y += height;
-            second.X += length;
-            second.Y = first.Y - length;
-            third.Y = first.Y;
-            third.X = first.X - length;
+            first.y += height;
+            second.x += length;
+            second.y = first.y - length;
+            third.y = first.y;
+            third.x = first.x - length;
 
-            _device.DrawLine(first, second, brush.Brush, stroke);
-            _device.DrawLine(first, third, brush.Brush, stroke);
+            _device.Object.DrawLine(first, second, brush.NativeBrush.Object, stroke);
+            _device.Object.DrawLine(first, third, brush.NativeBrush.Object, stroke);
         }
 
         /// <summary>
@@ -1232,14 +1220,14 @@ namespace SharpD2D.Drawing
         {
             if (!IsDrawing) throw ThrowHelper.UseBeginScene();
 
-            var rect = new SharpDX.Direct2D1.RoundedRectangle
+            var rect = new D2D1_ROUNDED_RECT
             {
-                RadiusX = radius,
-                RadiusY = radius,
-                Rect = new RawRectangleF(left, top, right, bottom)
+                radiusX = radius,
+                radiusY = radius,
+                rect = new D2D_RECT_F(left, top, right, bottom)
             };
 
-            _device.DrawRoundedRectangle(rect, brush.Brush, stroke);
+            _device.Object.DrawRoundedRectangle(rect, brush.NativeBrush.Object, stroke);
         }
 
         /// <summary>
@@ -1252,7 +1240,7 @@ namespace SharpD2D.Drawing
         {
             if (!IsDrawing) throw ThrowHelper.UseBeginScene();
 
-            _device.DrawRoundedRectangle(rectangle, brush.Brush, stroke);
+            _device.Object.DrawRoundedRectangle(rectangle, brush.NativeBrush.Object, stroke);
         }
 
         /// <summary>
@@ -1269,11 +1257,12 @@ namespace SharpD2D.Drawing
             if (text == null) throw new ArgumentNullException(nameof(text));
             if (text.Length == 0) return default;
 
-            var layout = new TextLayout(_fontFactory, text, font.TextFormat, Width, Height);
+            var layout = _fontFactory.CreateTextLayout(font.TextFormat, text, text.Length, Width, Height);
 
-            if (fontSize != font.FontSize) layout.SetFontSize(fontSize, new TextRange(0, text.Length));
+            if (fontSize != font.FontSize) layout.Object.SetFontSize(fontSize, new DWRITE_TEXT_RANGE(0, (uint)text.Length));
 
-            var result = new PointF(layout.Metrics.Width, layout.Metrics.Height);
+            layout.Object.GetMetrics(out var metrics);
+            var result = new PointF(metrics.width, metrics.height);
 
             layout.Dispose();
 
@@ -1313,11 +1302,11 @@ namespace SharpD2D.Drawing
             if (clippedWidth <= fontSize) clippedWidth = Width;
             if (clippedHeight <= fontSize) clippedHeight = Height;
 
-            var layout = new TextLayout(_fontFactory, text, font.TextFormat, clippedWidth, clippedHeight);
+            var layout = _fontFactory.CreateTextLayout(font.TextFormat, text, text.Length, clippedWidth, clippedHeight);
 
-            if (fontSize != font.FontSize) layout.SetFontSize(fontSize, new TextRange(0, text.Length));
+            if (fontSize != font.FontSize) layout.Object.SetFontSize(fontSize, new DWRITE_TEXT_RANGE(0, (uint)text.Length));
 
-            _device.DrawTextLayout(new RawVector2(x, y), layout, brush.Brush, DrawTextOptions.Clip);
+            _device.Object.DrawTextLayout(new D2D_POINT_2F(x, y), layout.Object, brush.NativeBrush.Object, D2D1_DRAW_TEXT_OPTIONS.D2D1_DRAW_TEXT_OPTIONS_CLIP);
 
             layout.Dispose();
         }
@@ -1384,17 +1373,19 @@ namespace SharpD2D.Drawing
             if (clippedWidth <= fontSize) clippedWidth = Width;
             if (clippedHeight <= fontSize) clippedHeight = Height;
 
-            var layout = new TextLayout(_fontFactory, text, font.TextFormat, clippedWidth, clippedHeight);
+            var layout = _fontFactory.CreateTextLayout(font.TextFormat, text, text.Length, clippedWidth, clippedHeight);
 
-            if (fontSize != font.FontSize) layout.SetFontSize(fontSize, new TextRange(0, text.Length));
+            if (fontSize != font.FontSize) layout.Object.SetFontSize(fontSize, new DWRITE_TEXT_RANGE(0, (uint)text.Length));
 
-            var modifier = layout.FontSize * 0.25f;
-            var rectangle = new RawRectangleF(x - modifier, y - modifier, x + layout.Metrics.Width + modifier,
-                y + layout.Metrics.Height + modifier);
+            var fontSizeValue = layout.Object.GetFontSize();
+            var modifier = fontSizeValue * 0.25f;
+            layout.Object.GetMetrics(out var layoutMetrics);
+            var rectangle = new D2D_RECT_F(x - modifier, y - modifier, x + layoutMetrics.width + modifier,
+                y + layoutMetrics.height + modifier);
 
-            _device.FillRectangle(rectangle, background.Brush);
+            _device.Object.FillRectangle(rectangle, background.NativeBrush.Object);
 
-            _device.DrawTextLayout(new RawVector2(x, y), layout, brush.Brush, DrawTextOptions.Clip);
+            _device.Object.DrawTextLayout(new D2D_POINT_2F(x, y), layout.Object, brush.NativeBrush.Object, D2D1_DRAW_TEXT_OPTIONS.D2D1_DRAW_TEXT_OPTIONS_CLIP);
 
             layout.Dispose();
         }
@@ -1456,18 +1447,18 @@ namespace SharpD2D.Drawing
         {
             if (!IsDrawing) throw ThrowHelper.UseBeginScene();
 
-            var geometry = new PathGeometry(_factory);
+            var geometry = _factory.CreatePathGeometry();
 
             var sink = geometry.Open();
 
-            sink.BeginFigure(new RawVector2(aX, aY), FigureBegin.Hollow);
-            sink.AddLine(new RawVector2(bX, bY));
-            sink.AddLine(new RawVector2(cX, cY));
-            sink.EndFigure(FigureEnd.Closed);
+            sink.BeginFigure(new D2D_POINT_2F(aX, aY), D2D1_FIGURE_BEGIN.D2D1_FIGURE_BEGIN_HOLLOW);
+            sink.AddLine(new D2D_POINT_2F(bX, bY));
+            sink.AddLine(new D2D_POINT_2F(cX, cY));
+            sink.EndFigure(D2D1_FIGURE_END.D2D1_FIGURE_END_CLOSED);
 
             sink.Close();
 
-            _device.DrawGeometry(geometry, brush.Brush, stroke);
+            _device.Object.DrawGeometry(geometry.Object, brush.NativeBrush.Object, stroke, null);
 
             sink.Dispose();
             geometry.Dispose();
@@ -1514,11 +1505,11 @@ namespace SharpD2D.Drawing
         {
             if (!IsDrawing) throw ThrowHelper.UseBeginScene();
 
-            var outer = new RawRectangleF(left, top, right, bottom);
+            var outer = new D2D_RECT_F(left, top, right, bottom);
 
             if (percentage < 1.0f)
             {
-                _device.DrawRectangle(outer, outline.Brush, stroke);
+                _device.Object.DrawRectangle(outer, outline.NativeBrush.Object, stroke);
             }
             else
             {
@@ -1527,11 +1518,11 @@ namespace SharpD2D.Drawing
 
                 var halfStroke = stroke * 0.5f;
 
-                var inner = new RawRectangleF(left + halfStroke, top + halfStroke,
+                var inner = new D2D_RECT_F(left + halfStroke, top + halfStroke,
                     right - (width - filledWidth) - halfStroke, bottom - halfStroke);
 
-                _device.FillRectangle(inner, fill.Brush);
-                _device.DrawRectangle(outer, outline.Brush, stroke);
+                _device.Object.FillRectangle(inner, fill.NativeBrush.Object);
+                _device.Object.DrawRectangle(outer, outline.NativeBrush.Object, stroke);
             }
         }
 
@@ -1558,11 +1549,19 @@ namespace SharpD2D.Drawing
             ThrowIfNotInitialized();
             if (!IsDrawing) return;
 
-            var result = _device.TryEndDraw(out var _, out var _);
+            try
+            {
+                _device.Object.EndDraw(0, 0).ThrowOnError();
+            }
+            catch
+            {
+                IsDrawing = false;
+                Recreate();
+                RecreateResources?.Invoke(this, new RecreateResourcesEventArgs(this));
+                return;
+            }
 
             IsDrawing = false;
-
-            if (result.Failure) Recreate();
 
             if (MeasureFPS && _watch.IsRunning)
             {
@@ -1595,7 +1594,7 @@ namespace SharpD2D.Drawing
             if (obj is Graphics gfx)
                 return gfx.WindowHandle == WindowHandle
                        && gfx.IsInitialized == IsInitialized
-                       && gfx._device.NativePointer == _device.NativePointer;
+                       && gfx._device?.Equals(_device) == true;
             return false;
         }
 
@@ -1612,7 +1611,7 @@ namespace SharpD2D.Drawing
             return value != null
                    && value.WindowHandle == WindowHandle
                    && value.IsInitialized == IsInitialized
-                   && value._device.NativePointer == _device.NativePointer;
+                   && value._device?.Equals(_device) == true;
         }
 
         /// <summary>
@@ -1626,7 +1625,7 @@ namespace SharpD2D.Drawing
         {
             if (!IsDrawing) ThrowHelper.UseBeginScene();
 
-            _device.FillEllipse(new SharpDX.Direct2D1.Ellipse(new RawVector2(x, y), radius, radius), brush.Brush);
+            _device.Object.FillEllipse(new D2D1_ELLIPSE(x, y, radius, radius), brush.NativeBrush.Object);
         }
 
         /// <summary>
@@ -1662,7 +1661,7 @@ namespace SharpD2D.Drawing
         {
             if (!IsDrawing) throw ThrowHelper.UseBeginScene();
 
-            _device.FillEllipse(new SharpDX.Direct2D1.Ellipse(new RawVector2(x, y), radiusX, radiusY), brush.Brush);
+            _device.Object.FillEllipse(new D2D1_ELLIPSE(x, y, radiusX, radiusY), brush.NativeBrush.Object);
         }
 
         /// <summary>
@@ -1696,19 +1695,7 @@ namespace SharpD2D.Drawing
         {
             if (!IsDrawing) throw ThrowHelper.UseBeginScene();
 
-            _device.FillGeometry(geometry, brush.Brush);
-        }
-
-        /// <summary>
-        ///     Fills the Mesh using the given brush.
-        /// </summary>
-        /// <param name="mesh">The Mesh to be drawn.</param>
-        /// <param name="brush">A brush that determines the color of the text.</param>
-        public void FillMesh(Mesh mesh, IBrush brush)
-        {
-            if (!IsDrawing) throw ThrowHelper.UseBeginScene();
-
-            _device.FillMesh(mesh, brush.Brush);
+            _device.Object.FillGeometry(geometry.NativeGeometry.Object, brush.NativeBrush.Object, null);
         }
 
         /// <summary>
@@ -1723,7 +1710,7 @@ namespace SharpD2D.Drawing
         {
             if (!IsDrawing) throw ThrowHelper.UseBeginScene();
 
-            _device.FillRectangle(new RawRectangleF(left, top, right, bottom), brush.Brush);
+            _device.Object.FillRectangle(new D2D_RECT_F(left, top, right, bottom), brush.NativeBrush.Object);
         }
 
         /// <summary>
@@ -1749,14 +1736,14 @@ namespace SharpD2D.Drawing
         {
             if (!IsDrawing) throw ThrowHelper.UseBeginScene();
 
-            var rect = new SharpDX.Direct2D1.RoundedRectangle
+            var rect = new D2D1_ROUNDED_RECT
             {
-                RadiusX = radius,
-                RadiusY = radius,
-                Rect = new RawRectangleF(left, top, right, bottom)
+                radiusX = radius,
+                radiusY = radius,
+                rect = new D2D_RECT_F(left, top, right, bottom)
             };
 
-            _device.FillRoundedRectangle(rect, brush.Brush);
+            _device.Object.FillRoundedRectangle(rect, brush.NativeBrush.Object);
         }
 
         /// <summary>
@@ -1768,7 +1755,7 @@ namespace SharpD2D.Drawing
         {
             if (!IsDrawing) throw ThrowHelper.UseBeginScene();
 
-            _device.FillRoundedRectangle(rectangle, brush.Brush);
+            _device.Object.FillRoundedRectangle(rectangle, brush.NativeBrush.Object);
         }
 
         /// <summary>
@@ -1785,18 +1772,18 @@ namespace SharpD2D.Drawing
         {
             if (!IsDrawing) throw ThrowHelper.UseBeginScene();
 
-            var geometry = new PathGeometry(_factory);
+            var geometry = _factory.CreatePathGeometry();
 
             var sink = geometry.Open();
 
-            sink.BeginFigure(new RawVector2(aX, aY), FigureBegin.Filled);
-            sink.AddLine(new RawVector2(bX, bY));
-            sink.AddLine(new RawVector2(cX, cY));
-            sink.EndFigure(FigureEnd.Closed);
+            sink.BeginFigure(new D2D_POINT_2F(aX, aY), D2D1_FIGURE_BEGIN.D2D1_FIGURE_BEGIN_FILLED);
+            sink.AddLine(new D2D_POINT_2F(bX, bY));
+            sink.AddLine(new D2D_POINT_2F(cX, cY));
+            sink.EndFigure(D2D1_FIGURE_END.D2D1_FIGURE_END_CLOSED);
 
             sink.Close();
 
-            _device.FillGeometry(geometry, brush.Brush);
+            _device.Object.FillGeometry(geometry.Object, brush.NativeBrush.Object, null);
 
             sink.Dispose();
             geometry.Dispose();
@@ -1828,7 +1815,7 @@ namespace SharpD2D.Drawing
         ///     Gets the Factory used by this Graphics surface.
         /// </summary>
         /// <returns>The Factory of this Graphics surface.</returns>
-        public Factory GetFactory()
+        public IComObject<ID2D1Factory> GetFactory()
         {
             ThrowIfNotInitialized();
 
@@ -1839,7 +1826,7 @@ namespace SharpD2D.Drawing
         ///     Gets the FontFactory used by this Graphics surface.
         /// </summary>
         /// <returns>The FontFactory of this Graphics surface.</returns>
-        public FontFactory GetFontFactory()
+        public IComObject<IDWriteFactory> GetFontFactory()
         {
             ThrowIfNotInitialized();
 
@@ -1861,7 +1848,7 @@ namespace SharpD2D.Drawing
         ///     Gets the RenderTarget used by this Graphics surface.
         /// </summary>
         /// <returns>The RenderTarget of this Graphics surface.</returns>
-        public RenderTarget GetRenderTarget()
+        public IComObject<ID2D1HwndRenderTarget> GetRenderTarget()
         {
             ThrowIfNotInitialized();
 
@@ -1881,21 +1868,21 @@ namespace SharpD2D.Drawing
         {
             if (!IsDrawing) ThrowHelper.UseBeginScene();
 
-            var ellipse = new SharpDX.Direct2D1.Ellipse(new RawVector2(x, y), radius, radius);
+            var ellipse = new D2D1_ELLIPSE(x, y, radius, radius);
 
-            _device.DrawEllipse(ellipse, fill.Brush, stroke);
+            _device.Object.DrawEllipse(ellipse, fill.NativeBrush.Object, stroke);
 
             var halfStroke = stroke * 0.5f;
 
-            ellipse.RadiusX += halfStroke;
-            ellipse.RadiusY += halfStroke;
+            ellipse.radiusX += halfStroke;
+            ellipse.radiusY += halfStroke;
 
-            _device.DrawEllipse(ellipse, outline.Brush, halfStroke);
+            _device.Object.DrawEllipse(ellipse, outline.NativeBrush.Object, halfStroke);
 
-            ellipse.RadiusX -= stroke;
-            ellipse.RadiusY -= stroke;
+            ellipse.radiusX -= stroke;
+            ellipse.radiusY -= stroke;
 
-            _device.DrawEllipse(ellipse, outline.Brush, halfStroke);
+            _device.Object.DrawEllipse(ellipse, outline.NativeBrush.Object, halfStroke);
         }
 
         /// <summary>
@@ -1938,21 +1925,21 @@ namespace SharpD2D.Drawing
         {
             if (!IsDrawing) throw ThrowHelper.UseBeginScene();
 
-            var ellipse = new SharpDX.Direct2D1.Ellipse(new RawVector2(x, y), radiusX, radiusY);
+            var ellipse = new D2D1_ELLIPSE(x, y, radiusX, radiusY);
 
-            _device.DrawEllipse(ellipse, fill.Brush, stroke);
+            _device.Object.DrawEllipse(ellipse, fill.NativeBrush.Object, stroke);
 
             var halfStroke = stroke * 0.5f;
 
-            ellipse.RadiusX += halfStroke;
-            ellipse.RadiusY += halfStroke;
+            ellipse.radiusX += halfStroke;
+            ellipse.radiusY += halfStroke;
 
-            _device.DrawEllipse(ellipse, outline.Brush, halfStroke);
+            _device.Object.DrawEllipse(ellipse, outline.NativeBrush.Object, halfStroke);
 
-            ellipse.RadiusX -= stroke;
-            ellipse.RadiusY -= stroke;
+            ellipse.radiusX -= stroke;
+            ellipse.radiusY -= stroke;
 
-            _device.DrawEllipse(ellipse, outline.Brush, halfStroke);
+            _device.Object.DrawEllipse(ellipse, outline.NativeBrush.Object, halfStroke);
         }
 
         /// <summary>
@@ -1994,19 +1981,18 @@ namespace SharpD2D.Drawing
         /// <param name="stroke">A value that determines the width/thickness of the circle.</param>
         public void OutlineFillCircle(IBrush outline, IBrush fill, float x, float y, float radius, float stroke)
         {
-            var ellipseGeometry = new EllipseGeometry(_factory,
-                new SharpDX.Direct2D1.Ellipse(new RawVector2(x, y), radius, radius));
+            var ellipseGeometry = _factory.CreateEllipseGeometry(new D2D1_ELLIPSE(x, y, radius, radius));
 
-            var geometry = new PathGeometry(_factory);
+            var geometry = _factory.CreatePathGeometry();
 
             var sink = geometry.Open();
 
-            ellipseGeometry.Outline(sink);
+            ellipseGeometry.Object.Outline(sink.Object);
 
             sink.Close();
 
-            _device.FillGeometry(geometry, fill.Brush);
-            _device.DrawGeometry(geometry, outline.Brush, stroke);
+            _device.Object.FillGeometry(geometry.Object, fill.NativeBrush.Object, null);
+            _device.Object.DrawGeometry(geometry.Object, outline.NativeBrush.Object, stroke, null);
 
             sink.Dispose();
             geometry.Dispose();
@@ -2051,19 +2037,18 @@ namespace SharpD2D.Drawing
         public void OutlineFillEllipse(IBrush outline, IBrush fill, float x, float y, float radiusX, float radiusY,
             float stroke)
         {
-            var ellipseGeometry = new EllipseGeometry(_factory,
-                new SharpDX.Direct2D1.Ellipse(new RawVector2(x, y), radiusX, radiusY));
+            var ellipseGeometry = _factory.CreateEllipseGeometry(new D2D1_ELLIPSE(x, y, radiusX, radiusY));
 
-            var geometry = new PathGeometry(_factory);
+            var geometry = _factory.CreatePathGeometry();
 
             var sink = geometry.Open();
 
-            ellipseGeometry.Outline(sink);
+            ellipseGeometry.Object.Outline(sink.Object);
 
             sink.Close();
 
-            _device.FillGeometry(geometry, fill.Brush);
-            _device.DrawGeometry(geometry, outline.Brush, stroke);
+            _device.Object.FillGeometry(geometry.Object, fill.NativeBrush.Object, null);
+            _device.Object.DrawGeometry(geometry.Object, outline.NativeBrush.Object, stroke, null);
 
             sink.Dispose();
             geometry.Dispose();
@@ -2113,19 +2098,19 @@ namespace SharpD2D.Drawing
         {
             if (!IsDrawing) throw ThrowHelper.UseBeginScene();
 
-            var rectangleGeometry = new RectangleGeometry(_factory, new RawRectangleF(left, top, right, bottom));
+            var rectangleGeometry = _factory.CreateRectangleGeometry(new D2D_RECT_F(left, top, right, bottom));
 
-            var geometry = new PathGeometry(_factory);
+            var geometry = _factory.CreatePathGeometry();
 
             var sink = geometry.Open();
 
-            rectangleGeometry.Widen(stroke, sink);
-            rectangleGeometry.Outline(sink);
+            rectangleGeometry.Object.Widen(stroke, null, 0, 0.25f, sink.Object);
+            rectangleGeometry.Object.Outline(sink.Object);
 
             sink.Close();
 
-            _device.FillGeometry(geometry, fill.Brush);
-            _device.DrawGeometry(geometry, outline.Brush, stroke);
+            _device.Object.FillGeometry(geometry.Object, fill.NativeBrush.Object, null);
+            _device.Object.DrawGeometry(geometry.Object, outline.NativeBrush.Object, stroke, null);
 
             sink.Dispose();
             geometry.Dispose();
@@ -2160,22 +2145,22 @@ namespace SharpD2D.Drawing
         {
             if (!IsDrawing) throw ThrowHelper.UseBeginScene();
 
-            var geometry = new PathGeometry(_factory);
+            var geometry = _factory.CreatePathGeometry();
 
             var sink = geometry.Open();
 
             var half = stroke / 2.0f;
 
-            sink.BeginFigure(new RawVector2(startX, startY - half), FigureBegin.Filled);
+            sink.BeginFigure(new D2D_POINT_2F(startX, startY - half), D2D1_FIGURE_BEGIN.D2D1_FIGURE_BEGIN_FILLED);
 
-            sink.AddLine(new RawVector2(endX, endY - half));
-            sink.AddLine(new RawVector2(endX, endY + half));
-            sink.AddLine(new RawVector2(startX, startY + half));
+            sink.AddLine(new D2D_POINT_2F(endX, endY - half));
+            sink.AddLine(new D2D_POINT_2F(endX, endY + half));
+            sink.AddLine(new D2D_POINT_2F(startX, startY + half));
 
-            sink.EndFigure(FigureEnd.Closed);
+            sink.EndFigure(D2D1_FIGURE_END.D2D1_FIGURE_END_CLOSED);
 
-            _device.DrawGeometry(geometry, outline.Brush, half);
-            _device.FillGeometry(geometry, fill.Brush);
+            _device.Object.DrawGeometry(geometry.Object, outline.NativeBrush.Object, half, null);
+            _device.Object.FillGeometry(geometry.Object, fill.NativeBrush.Object, null);
 
             sink.Dispose();
             geometry.Dispose();
@@ -2226,15 +2211,15 @@ namespace SharpD2D.Drawing
             var width = right;
             var height = bottom;
 
-            _device.DrawRectangle(
-                new RawRectangleF(left - halfStroke, top - halfStroke, width + halfStroke, height + halfStroke),
-                outline.Brush, halfStroke);
+            _device.Object.DrawRectangle(
+                new D2D_RECT_F(left - halfStroke, top - halfStroke, width + halfStroke, height + halfStroke),
+                outline.NativeBrush.Object, halfStroke);
 
-            _device.DrawRectangle(
-                new RawRectangleF(left + halfStroke, top + halfStroke, width - halfStroke, height - halfStroke),
-                outline.Brush, halfStroke);
+            _device.Object.DrawRectangle(
+                new D2D_RECT_F(left + halfStroke, top + halfStroke, width - halfStroke, height - halfStroke),
+                outline.NativeBrush.Object, halfStroke);
 
-            _device.DrawRectangle(new RawRectangleF(left, top, width, height), fill.Brush, halfStroke);
+            _device.Object.DrawRectangle(new D2D_RECT_F(left, top, width, height), fill.NativeBrush.Object, halfStroke);
         }
 
         /// <summary>
@@ -2301,23 +2286,25 @@ namespace SharpD2D.Drawing
             if (IsInitialized) throw new InvalidOperationException("Graphics device is already initialized");
             if (Width <= 0 || Height <= 0) throw new ArgumentOutOfRangeException("Width or Height is not valid");
             if (WindowHandle == IntPtr.Zero) throw new ArgumentOutOfRangeException("WindowHandle is zero");
-            if (!IsWindow(WindowHandle)) throw new ArgumentOutOfRangeException("WindowHandle is not valid");
+            if (!Functions.IsWindow(new HWND(WindowHandle))) throw new ArgumentOutOfRangeException("WindowHandle is not valid");
 
-            _factory = new Factory(UseMultiThreadedFactories ? FactoryType.MultiThreaded : FactoryType.SingleThreaded);
-            _fontFactory = new FontFactory();
+            _factory = D2D1Functions.D2D1CreateFactory(UseMultiThreadedFactories ? D2D1_FACTORY_TYPE.D2D1_FACTORY_TYPE_MULTI_THREADED : D2D1_FACTORY_TYPE.D2D1_FACTORY_TYPE_SINGLE_THREADED);
+            Functions.DWriteCreateFactory(DWRITE_FACTORY_TYPE.DWRITE_FACTORY_TYPE_SHARED, typeof(IDWriteFactory).GUID, out var dwritePtr).ThrowOnError();
+            _fontFactory = ComObject.FromPointer<IDWriteFactory>(dwritePtr)!;
 
             CreateDeviceForCurrentSurface();
 
-            _strokeStyle = new StrokeStyle(_factory, new StrokeStyleProperties
+            var strokeProps = new D2D1_STROKE_STYLE_PROPERTIES
             {
-                DashCap = CapStyle.Flat,
-                DashOffset = -1.0f,
-                DashStyle = DashStyle.Dash,
-                EndCap = CapStyle.Flat,
-                LineJoin = LineJoin.MiterOrBevel,
-                MiterLimit = 1.0f,
-                StartCap = CapStyle.Flat
-            });
+                dashCap = D2D1_CAP_STYLE.D2D1_CAP_STYLE_FLAT,
+                dashOffset = -1.0f,
+                dashStyle = D2D1_DASH_STYLE.D2D1_DASH_STYLE_DASH,
+                endCap = D2D1_CAP_STYLE.D2D1_CAP_STYLE_FLAT,
+                lineJoin = D2D1_LINE_JOIN.D2D1_LINE_JOIN_MITER_OR_BEVEL,
+                miterLimit = 1.0f,
+                startCap = D2D1_CAP_STYLE.D2D1_CAP_STYLE_FLAT
+            };
+            _strokeStyle = _factory.CreateStrokeStyle(strokeProps);
 
             IsInitialized = true;
         }

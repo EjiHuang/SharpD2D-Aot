@@ -1,5 +1,5 @@
 ﻿using System.Runtime.InteropServices;
-using SharpDX.Mathematics.Interop;
+using DirectN;
 
 namespace SharpD2D.Drawing
 {
@@ -245,21 +245,21 @@ namespace SharpD2D.Drawing
         }
 
         /// <summary>
-        ///     Converts a SharpDX RawColor4 to a Color
+        ///     Converts a DirectN D3DCOLORVALUE to a Color
         /// </summary>
-        /// <param name="color">A RawColor4</param>
-        public static implicit operator Color(RawColor4 color)
+        /// <param name="color">A D3DCOLORVALUE</param>
+        public static implicit operator Color(D3DCOLORVALUE color)
         {
-            return new Color(color.R, color.G, color.B, color.A);
+            return new Color(color.r, color.g, color.b, color.a);
         }
 
         /// <summary>
-        ///     Converts a Color to a SharpDX RawColor4
+        ///     Converts a Color to a DirectN D3DCOLORVALUE
         /// </summary>
         /// <param name="color"></param>
-        public static implicit operator RawColor4(Color color)
+        public static implicit operator D3DCOLORVALUE(Color color)
         {
-            return new RawColor4(color.R, color.G, color.B, color.A);
+            return new D3DCOLORVALUE { r = color.R, g = color.G, b = color.B, a = color.A };
         }
 
         /// <summary>

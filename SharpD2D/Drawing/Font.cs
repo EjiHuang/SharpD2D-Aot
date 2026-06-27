@@ -1,6 +1,7 @@
-﻿using System;
-using SharpDX.DirectWrite;
-using FontFactory = SharpDX.DirectWrite.Factory;
+using System;
+using DirectN;
+using DirectN.Extensions;
+using DirectN.Extensions.Com;
 
 namespace SharpD2D.Drawing
 {
@@ -10,9 +11,9 @@ namespace SharpD2D.Drawing
     public class Font : IDisposable
     {
         /// <summary>
-        ///     A Direct2D TextFormat.
+        ///     A DirectWrite TextFormat.
         /// </summary>
-        public TextFormat TextFormat;
+        public IComObject<IDWriteTextFormat> TextFormat;
 
         private Font()
         {
@@ -22,7 +23,7 @@ namespace SharpD2D.Drawing
         ///     Initializes a new Font by using the given text format.
         /// </summary>
         /// <param name="textFormat"></param>
-        public Font(TextFormat textFormat)
+        public Font(IComObject<IDWriteTextFormat> textFormat)
         {
             TextFormat = textFormat ?? throw new ArgumentNullException(nameof(textFormat));
         }
@@ -30,53 +31,69 @@ namespace SharpD2D.Drawing
         /// <summary>
         ///     Initializes a new Font by using the specified name and style.
         /// </summary>
-        /// <param name="factory">The FontFactory from your Graphics device.</param>
+        /// <param name="factory">The IDWriteFactory from your Graphics device.</param>
         /// <param name="fontFamilyName">The name of the font family.</param>
         /// <param name="size">The size of this Font.</param>
         /// <param name="bold">A Boolean value indicating whether this Font is bold.</param>
         /// <param name="italic">A Boolean value indicating whether this Font is italic.</param>
         /// <param name="wordWrapping">A Boolean value indicating whether this Font uses word wrapping.</param>
-        public Font(FontFactory factory, string fontFamilyName, float size, bool bold = false, bool italic = false,
+        public Font(IComObject<IDWriteFactory> factory, string fontFamilyName, float size, bool bold = false, bool italic = false,
             bool wordWrapping = false)
         {
             if (factory == null) throw new ArgumentNullException(nameof(factory));
             if (string.IsNullOrEmpty(fontFamilyName)) throw new ArgumentNullException(nameof(fontFamilyName));
 
-            TextFormat = new TextFormat(factory, fontFamilyName, bold ? FontWeight.Bold : FontWeight.Normal,
-                italic ? FontStyle.Italic : FontStyle.Normal, size)
-            {
-                WordWrapping = wordWrapping ? WordWrapping.Wrap : WordWrapping.NoWrap
-            };
+            var weight = bold ? DWRITE_FONT_WEIGHT.DWRITE_FONT_WEIGHT_BOLD : DWRITE_FONT_WEIGHT.DWRITE_FONT_WEIGHT_NORMAL;
+            var style = italic ? DWRITE_FONT_STYLE.DWRITE_FONT_STYLE_ITALIC : DWRITE_FONT_STYLE.DWRITE_FONT_STYLE_NORMAL;
+            var wrapping = wordWrapping ? DWRITE_WORD_WRAPPING.DWRITE_WORD_WRAPPING_WRAP : DWRITE_WORD_WRAPPING.DWRITE_WORD_WRAPPING_NO_WRAP;
+
+            TextFormat = factory.CreateTextFormat(fontFamilyName, size, null, weight, style, DWRITE_FONT_STRETCH.DWRITE_FONT_STRETCH_NORMAL);
+            TextFormat.Object.SetWordWrapping(wrapping);
         }
 
         /// <summary>
         ///     Gets a value that indicates whether this Font is bold.
         /// </summary>
-        public bool Bold => TextFormat.FontWeight == FontWeight.Bold;
+        public bool Bold => TextFormat.Object.GetFontWeight() == DWRITE_FONT_WEIGHT.DWRITE_FONT_WEIGHT_BOLD;
 
         /// <summary>
         ///     Gets a value that indicates whether this Font is italic.
         /// </summary>
-        public bool Italic => TextFormat.FontStyle == FontStyle.Italic;
+        public bool Italic => TextFormat.Object.GetFontStyle() == DWRITE_FONT_STYLE.DWRITE_FONT_STYLE_ITALIC;
 
         /// <summary>
         ///     Enables or disables word wrapping for this Font.
         /// </summary>
         public bool WordWeapping
         {
-            get => TextFormat.WordWrapping == WordWrapping.Wrap;
-            set => TextFormat.WordWrapping = value ? WordWrapping.Wrap : WordWrapping.NoWrap;
+            get => TextFormat.Object.GetWordWrapping() == DWRITE_WORD_WRAPPING.DWRITE_WORD_WRAPPING_WRAP;
+            set => TextFormat.Object.SetWordWrapping(value ? DWRITE_WORD_WRAPPING.DWRITE_WORD_WRAPPING_WRAP : DWRITE_WORD_WRAPPING.DWRITE_WORD_WRAPPING_NO_WRAP);
         }
 
         /// <summary>
         ///     Gets the size of this Font measured in pixels.
         /// </summary>
-        public float FontSize => TextFormat.FontSize;
+        public float FontSize => TextFormat.Object.GetFontSize();
 
         /// <summary>
         ///     Gets the name of this Fonts family
         /// </summary>
-        public string FontFamilyName => TextFormat.FontFamilyName;
+        public string FontFamilyName
+        {
+            get
+            {
+                var len = TextFormat.Object.GetFontFamilyNameLength();
+                var chars = new char[len + 1];
+                unsafe
+                {
+                    fixed (char* p = chars)
+                    {
+                        TextFormat.Object.GetFontFamilyName(new PWSTR((nint)p), len + 1);
+                    }
+                }
+                return new string(chars, 0, (int)len);
+            }
+        }
 
         /// <summary>
         ///     Allows an object to try to free resources and perform other cleanup operations before it is reclaimed by garbage
@@ -98,31 +115,9 @@ namespace SharpD2D.Drawing
         /// </returns>
         public override bool Equals(object obj)
         {
-            if (obj is Font font)
-                return font.Bold == Bold
-                       && font.Italic == Italic
-                       && font.WordWeapping == WordWeapping
-                       && font.FontSize == FontSize
-                       && font.FontFamilyName == FontFamilyName;
+            if (obj is Font value)
+                return value.TextFormat == TextFormat;
             return false;
-        }
-
-        /// <summary>
-        ///     Returns a value indicating whether two specified instances of Font represent the same value.
-        /// </summary>
-        /// <param name="value">An object to compare to this instance.</param>
-        /// <returns>
-        ///     <see langword="true" /> if <paramref name="value" /> is equal to this instance; otherwise,
-        ///     <see langword="false" />.
-        /// </returns>
-        public bool Equals(Font value)
-        {
-            return value != null
-                   && value.Bold == Bold
-                   && value.Italic == Italic
-                   && value.WordWeapping == WordWeapping
-                   && value.FontSize == FontSize
-                   && value.FontFamilyName == FontFamilyName;
         }
 
         /// <summary>
@@ -131,51 +126,18 @@ namespace SharpD2D.Drawing
         /// <returns>A 32-bit signed integer hash code.</returns>
         public override int GetHashCode()
         {
-            return OverrideHelper.HashCodes(
-                Bold.GetHashCode(),
-                Italic.GetHashCode(),
-                WordWeapping.GetHashCode(),
-                FontSize.GetHashCode(),
-                FontFamilyName.GetHashCode());
+            return TextFormat.GetHashCode();
         }
 
         /// <summary>
-        ///     Converts this Font instance to a human-readable string.
+        ///     Converts this Font to a human-readable string.
         /// </summary>
         /// <returns>A string representation of this Font.</returns>
         public override string ToString()
         {
             return OverrideHelper.ToString(
-                "FontFamilyName", FontFamilyName,
-                "FontSize", FontSize.ToString(),
-                "Italic", Italic.ToString(),
-                "Bold", Bold.ToString(),
-                "WordWrapping", WordWeapping.ToString());
-        }
-
-        /// <summary>
-        ///     Converts this Font to a Direct2D TextFormat.
-        /// </summary>
-        /// <param name="font"></param>
-        public static implicit operator TextFormat(Font font)
-        {
-            if (font == null) throw new ArgumentNullException(nameof(font));
-
-            return font.TextFormat;
-        }
-
-        /// <summary>
-        ///     Returns a value indicating whether two specified instances of Font represent the same value.
-        /// </summary>
-        /// <param name="left">The first object to compare.</param>
-        /// <param name="right">The second object to compare.</param>
-        /// <returns>
-        ///     <see langword="true" /> if <paramref name="left" /> and <paramref name="right" /> are equal; otherwise,
-        ///     <see langword="false" />.
-        /// </returns>
-        public static bool Equals(Font left, Font right)
-        {
-            return left?.Equals(right) == true;
+                "Font", "Font",
+                "FontFamilyName", FontFamilyName);
         }
 
         #region IDisposable Support
@@ -190,7 +152,11 @@ namespace SharpD2D.Drawing
         {
             if (!disposedValue)
             {
-                TextFormat?.Dispose();
+                if (TextFormat != null)
+                {
+                    TextFormat.Dispose();
+                    TextFormat = null;
+                }
 
                 disposedValue = true;
             }

@@ -71,7 +71,7 @@ public class Example
             _gridGeometry.BeginFigure(line);
             _gridGeometry.EndFigure(false);
         }
-
+        
         _gridGeometry.Close();
 
         _randomFigures = new List<Action<Graphics, float, float>>

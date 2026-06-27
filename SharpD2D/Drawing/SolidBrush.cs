@@ -1,5 +1,7 @@
-﻿using System;
-using SharpDX.Direct2D1;
+using System;
+using DirectN;
+using DirectN.Extensions;
+using DirectN.Extensions.Com;
 
 namespace SharpD2D.Drawing
 {
@@ -8,51 +10,54 @@ namespace SharpD2D.Drawing
     /// </summary>
     public class SolidBrush : IDisposable, IBrush
     {
-        private SolidColorBrush _brush;
+        private IComObject<ID2D1SolidColorBrush> _brush;
 
         private SolidBrush()
         {
         }
 
         /// <summary>
-        ///     Initializes a new SolidBrush for the given Graphics device using a transparent Color.
+        ///     Initializes a new SolidBrush for the given render target using a transparent Color.
         /// </summary>
-        /// <param name="renderTarget">A Graphics device.</param>
-        public SolidBrush(RenderTarget renderTarget)
+        /// <param name="renderTarget">A render target.</param>
+        public SolidBrush(IComObject<ID2D1RenderTarget> renderTarget)
         {
             if (renderTarget == null) throw new ArgumentNullException(nameof(renderTarget));
-
-            _brush = new SolidColorBrush(renderTarget, default);
+            var color = new D3DCOLORVALUE { r = 0, g = 0, b = 0, a = 0 };
+            _brush = renderTarget.CreateSolidColorBrush(color);
         }
 
         /// <summary>
-        ///     Initializes a new SolidBrush for the given Graphics device using the given Color.
+        ///     Initializes a new SolidBrush for the given render target using the given Color.
         /// </summary>
-        /// <param name="renderTarget">A Graphics device.</param>
+        /// <param name="renderTarget">A render target.</param>
         /// <param name="color">A Color structure including the color components for this SolidBrush.</param>
-        public SolidBrush(RenderTarget renderTarget, Color color)
+        public SolidBrush(IComObject<ID2D1RenderTarget> renderTarget, Color color)
         {
             if (renderTarget == null) throw new ArgumentNullException(nameof(renderTarget));
-
-            _brush = new SolidColorBrush(renderTarget, color);
+            _brush = renderTarget.CreateSolidColorBrush((D3DCOLORVALUE)color);
         }
+
+        /// <summary>
+        ///     Gets the underlying native brush.
+        /// </summary>
+        public IComObject<ID2D1Brush> NativeBrush => _brush!;
 
         /// <summary>
         ///     Gets or sets the Color of the underlying Brush.
         /// </summary>
         public Color Color
         {
-            get => _brush.Color;
-            set => _brush.Color = value;
-        }
-
-        /// <summary>
-        ///     Gets or sets the underlying Brush.
-        /// </summary>
-        public Brush Brush
-        {
-            get => _brush;
-            set => _brush = (SolidColorBrush)value;
+            get
+            {
+                var c = _brush.Object.GetColor();
+                return new Color(c.r, c.g, c.b, c.a);
+            }
+            set
+            {
+                var c = new D3DCOLORVALUE { r = value.R, g = value.G, b = value.B, a = value.A };
+                _brush.Object.SetColor(c);
+            }
         }
 
         /// <summary>
@@ -76,7 +81,7 @@ namespace SharpD2D.Drawing
         public override bool Equals(object obj)
         {
             if (obj is SolidBrush value)
-                return value._brush.NativePointer == _brush.NativePointer;
+                return value._brush == _brush;
             return false;
         }
 
@@ -91,7 +96,7 @@ namespace SharpD2D.Drawing
         public bool Equals(SolidBrush value)
         {
             return value != null
-                   && value._brush.NativePointer == _brush.NativePointer;
+                   && value._brush == _brush;
         }
 
         /// <summary>
@@ -101,7 +106,7 @@ namespace SharpD2D.Drawing
         public override int GetHashCode()
         {
             return OverrideHelper.HashCodes(
-                _brush.NativePointer.GetHashCode());
+                _brush.GetHashCode());
         }
 
         /// <summary>
@@ -113,15 +118,6 @@ namespace SharpD2D.Drawing
             return OverrideHelper.ToString(
                 "Brush", "SolidBrush",
                 "Color", Color.ToString());
-        }
-
-        /// <summary>
-        ///     Converts a SolidBrush to a SharpDX SolidColorBrush-
-        /// </summary>
-        /// <param name="brush">A SolidBrush.</param>
-        public static implicit operator SolidColorBrush(SolidBrush brush)
-        {
-            return brush._brush;
         }
 
         /// <summary>
@@ -171,4 +167,5 @@ namespace SharpD2D.Drawing
 
         #endregion
     }
+
 }

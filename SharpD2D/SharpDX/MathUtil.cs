@@ -47,7 +47,7 @@
 
 using System;
 
-namespace SharpDX
+namespace SharpD2D
 {
     internal static class MathUtil
     {
