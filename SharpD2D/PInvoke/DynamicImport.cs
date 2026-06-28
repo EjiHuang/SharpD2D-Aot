@@ -50,18 +50,18 @@ namespace SharpD2D.PInvoke
             return ImportMethod(ImportLibrary(libraryName), methodName);
         }
 
-        public static T Import<T>(IntPtr moduleHandle, string methodName)
+        public static T Import<T>(IntPtr moduleHandle, string methodName) where T : Delegate
         {
             var address = ImportMethod(moduleHandle, methodName);
 
-            return (T)(object)Marshal.GetDelegateForFunctionPointer(address, typeof(T));
+            return Marshal.GetDelegateForFunctionPointer<T>(address);
         }
 
-        public static T Import<T>(string libraryName, string methodName)
+        public static T Import<T>(string libraryName, string methodName) where T : Delegate
         {
             var address = ImportMethod(libraryName, methodName);
 
-            return (T)(object)Marshal.GetDelegateForFunctionPointer(address, typeof(T));
+            return Marshal.GetDelegateForFunctionPointer<T>(address);
         }
     }
 

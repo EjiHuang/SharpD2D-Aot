@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<OutputType>Exe</OutputType>
+		<TargetFramework>net10.0</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<PublishAot>true</PublishAot>
+		<IsAotCompatible>true</IsAotCompatible>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\SharpD2D\SharpD2D.csproj" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<Compile Include="..\Examples\Example.cs" Link="Example.cs" />
+	</ItemGroup>
+
+</Project>
