@@ -8,14 +8,6 @@
 
 > This is a fork of the original [SharpD2D](https://github.com/Sardelka9515/SharpD2D) by **Sardelka**, rewritten to use DirectNAot as the underlying interop layer.
 
-## ✨ Key Features
-
-- 🚀 **Native AOT Ready** — Compile to a single native executable with no runtime dependency
-- 🎯 **.NET 10** — Targeting the latest .NET release
-- 🖼️ **Direct2D & DirectWrite** — Full hardware-accelerated 2D graphics and text rendering
-- 🪟 **Overlay & Sticky Windows** — Transparent overlay windows and attach-to-window support
-- 🧩 **WinForms Integration** — Embed Direct2D canvases in WinForms controls
-
 ## 📦 Solution Structure
 
 | Project | Description |
@@ -59,7 +51,7 @@ MIT — see [LICENSE](LICENSE) for details.
 
 | | |
 |---|---|
-| **Sardelka** | Original author of SharpD2D |
-| **[@EjiHuang](https://github.com/EjiHuang)** | DirectNAot refactoring & Native AOT enablement |
+| **[Sardelka](https://github.com/Sardelka9515)** | Original author of SharpD2D |
+| **[EjiHuang](https://github.com/EjiHuang)** | DirectNAot refactoring & Native AOT enablement |
 
 See [CONTRIBUTORS.md](CONTRIBUTORS.md) for more details.
