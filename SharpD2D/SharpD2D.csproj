@@ -10,9 +10,11 @@
 		<Version>0.2.0.0</Version>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 		<Title>SharpD2D</Title>
-		<Authors>Sardelka</Authors>
+		<Authors>Sardelka;EjiHuang</Authors>
 		<PackageProjectUrl>https://github.com/Sardelka9515/SharpD2D</PackageProjectUrl>
 		<RepositoryUrl>https://github.com/Sardelka9515/SharpD2D</RepositoryUrl>
+		<Copyright>Copyright © Sardelka. DirectNAot refactoring by EjiHuang (https://github.com/EjiHuang)</Copyright>
+		<Description>SharpD2D is a .NET library providing managed bindings for Direct2D and DirectWrite, refactored on top of DirectNAot for Native AOT compatibility.</Description>
 		<PublishAot>true</PublishAot>
 		<IsAotCompatible>true</IsAotCompatible>
 	</PropertyGroup>
