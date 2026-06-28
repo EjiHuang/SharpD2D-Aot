@@ -4,7 +4,7 @@
 [![Native AOT](https://img.shields.io/badge/Native%20AOT-ready-green)](https://learn.microsoft.com/dotnet/core/deploying/native-aot)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-**SharpD2D-Aot** is a .NET library providing managed bindings for [Direct2D](https://learn.microsoft.com/windows/win32/direct2d/direct2d-portal) and [DirectWrite](https://learn.microsoft.com/windows/win32/directwrite/direct-write-portal), refactored on top of [DirectNAot](https://www.nuget.org/packages/DirectNAot) to enable full **Native AOT** compilation support.
+**SharpD2D-Aot** is a .NET library providing managed bindings for [Direct2D](https://learn.microsoft.com/windows/win32/direct2d/direct2d-portal) and [DirectWrite](https://learn.microsoft.com/windows/win32/directwrite/direct-write-portal), refactored on top of [DirectNAot](https://github.com/smourier/DirectNAot) to enable full **Native AOT** compilation support.
 
 > This is a fork of the original [SharpD2D](https://github.com/Sardelka9515/SharpD2D) by **Sardelka**, rewritten to use DirectNAot as the underlying interop layer.
 
