@@ -16,4 +16,10 @@
 		<Compile Include="..\Examples\Example.cs" Link="Example.cs" />
 	</ItemGroup>
 
+	<ItemGroup>
+		<None Update="Microsoft-DirectX-Logo-wordmark.png">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</None>
+	</ItemGroup>
+
 </Project>

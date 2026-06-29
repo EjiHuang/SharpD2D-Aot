@@ -10,7 +10,7 @@ OverlayExample();
 
 static void OverlayExample()
 {
-    var wind = new OverlayWindow(Rectangle.Create(0, 0, 800, 600))
+    var wind = new OverlayWindow(Rectangle.Create(0, 0, 800, 800))
     {
         FPS = 60
     };

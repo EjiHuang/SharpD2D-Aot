@@ -16,6 +16,7 @@ public class Example
     private long _lastRandomSet;
     private Random _random;
     private List<Action<Graphics, float, float>> _randomFigures;
+    private Image _logo;
 
     public Example(Canvas canvas) : this(canvas, new Color(0x33, 0x36, 0x3F))
     {
@@ -54,6 +55,9 @@ public class Example
 
         _fonts["arial"] = gfx.CreateFont("Arial", 12);
         _fonts["consolas"] = gfx.CreateFont("Consolas", 14);
+
+        _logo?.Dispose();
+        _logo = new Image(gfx, "Microsoft-DirectX-Logo-wordmark.png");
 
         _gridBounds = new RectangleF(20, 60, gfx.Width - 20, gfx.Height - 20);
         _gridGeometry = gfx.CreateGeometry();
@@ -95,6 +99,7 @@ public class Example
     {
         foreach (var pair in _brushes) pair.Value.Dispose();
         foreach (var pair in _fonts) pair.Value.Dispose();
+        _logo?.Dispose();
     }
 
     private void DrawGraphics(object sender, DrawGraphicsEventArgs e)
@@ -122,6 +127,15 @@ public class Example
         for (var row = _gridBounds.Top + 12; row < _gridBounds.Bottom - 120; row += 120)
         for (var column = _gridBounds.Left + 12; column < _gridBounds.Right - 120; column += 120)
             DrawRandomFigure(gfx, column, row);
+
+        if (_logo is not null)
+        {
+            const float logoHeight = 80f;
+            var scale = logoHeight / _logo.Height;
+            var logoWidth = _logo.Width * scale;
+            gfx.DrawImage(_logo, new PointF(gfx.Width - logoWidth - 30, gfx.Height - logoHeight - 30), scale);
+        }
+
         gfx.EndScene();
     }
 
