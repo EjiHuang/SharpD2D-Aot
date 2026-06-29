@@ -242,7 +242,25 @@ namespace SharpD2D.Drawing
 
         private IComObject<ID2D1Bitmap> LoadBitmapFromFile(IComObject<ID2D1RenderTarget> device, string path)
         {
-            return LoadBitmapFromMemory(device, File.ReadAllBytes(path));
+            ArgumentNullException.ThrowIfNull(device);
+            if (string.IsNullOrEmpty(path)) throw new ArgumentNullException(nameof(path));
+            if (!File.Exists(path)) throw new FileNotFoundException("Image file not found.", path);
+
+            _device = device;
+            IComObject<IWICBitmapDecoder> decoder = null;
+
+            try
+            {
+                decoder = WicImagingFactory.CreateDecoderFromFilename(path);
+                var bmp = ImageDecoder.Decode(device, decoder);
+                decoder.Dispose();
+                return bmp;
+            }
+            catch
+            {
+                decoder?.Dispose();
+                throw;
+            }
         }
 
         private static void TryCatch(Action action)
