@@ -140,33 +140,72 @@ namespace SharpD2D.Drawing.Imaging
             ArgumentNullException.ThrowIfNull(decoder);
 
             var frame = decoder.GetFrame(0);
-            var converter = WicImagingFactory.CreateFormatConverter();
+
+            // Convert frame to IWICBitmap first ¡ª WIC handles format conversion internally
+            IComObject<IWICBitmap> wicBmp;
+            try
+            {
+                wicBmp = WicImagingFactory.CreateBitmapFromSource(frame);
+                frame.Dispose();
+            }
+            catch
+            {
+                frame.Dispose();
+                throw;
+            }
+
+            // Try direct WIC¡úD2D conversion
+            var hr = device.Object.CreateBitmapFromWicBitmap(wicBmp.Object!, 0, out var d2dBmp);
+            if (hr.IsSuccess)
+            {
+                wicBmp.Dispose();
+                return new ComObject<ID2D1Bitmap>(d2dBmp);
+            }
+
+            wicBmp.Dispose();
+
+            // Fallback: use format converter with common pixel formats
+            return DecodeFallback(device, decoder);
+        }
+
+        private static IComObject<ID2D1Bitmap> DecodeFallback(IComObject<ID2D1RenderTarget> device, IComObject<IWICBitmapDecoder> decoder)
+        {
+            var frame = decoder.GetFrame(0);
 
             foreach (var format in _pixelFormatEnumerator)
             {
+                var converter = WicImagingFactory.CreateFormatConverter();
+                IComObject<IWICPalette> palette = null;
+
                 try
                 {
-                    converter.Object.Initialize(frame.Object!, format,
-                        WICBitmapDitherType.WICBitmapDitherTypeNone, null!, 0.0,
-                        WICBitmapPaletteType.WICBitmapPaletteTypeCustom);
+                    palette = WicImagingFactory.CreatePalette();
+                    palette.Object.InitializePredefined(WICBitmapPaletteType.WICBitmapPaletteTypeFixedHalftone256, 0);
 
-                    device.Object.CreateBitmapFromWicBitmap(converter.Object!, 0, out var bmp).ThrowOnError();
+                    var initHr = converter.Object.Initialize(frame.Object!, format,
+                        WICBitmapDitherType.WICBitmapDitherTypeNone, palette.Object!, 0.0,
+                        WICBitmapPaletteType.WICBitmapPaletteTypeCustom);
+                    if (initHr.IsError)
+                        continue;
+
+                    var bmpHr = device.Object.CreateBitmapFromWicBitmap(converter.Object!, 0, out var bmp);
+                    if (bmpHr.IsError)
+                        continue;
 
                     TryCatch(converter.Dispose);
+                    TryCatch(palette.Dispose);
                     TryCatch(frame.Dispose);
 
                     return new ComObject<ID2D1Bitmap>(bmp);
                 }
-                catch
+                finally
                 {
-                    TryCatch(converter.Dispose);
-                    converter = WicImagingFactory.CreateFormatConverter();
+                    TryCatch(() => converter?.Dispose());
+                    TryCatch(() => palette?.Dispose());
                 }
             }
 
-            TryCatch(converter.Dispose);
             TryCatch(frame.Dispose);
-
             throw new Exception("Unsupported Image Format!");
         }
     }
